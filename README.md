@@ -29,6 +29,11 @@ Implementation of the ERC-8004 protocol for agent discovery and trust through re
 - **ReputationRegistry**: `0xc565edcba77e3abeade40bfd6cf6bf583b3293e0`
 - **ValidationRegistry**: `0x18df085d85c586e9241e0cd121ca422f571c2da6`
 
+#### HyperEVM Testnet
+- **IdentityRegistry**: `0x8004A9560C0edce880cbD24Ba19646470851C986`
+- **ReputationRegistry**: `0x8004b490779A65D3290a31fD96471122050dF671`
+- **ValidationRegistry**: `0x8004C86198fdB8d8169c0405D510EC86cc7B0551`
+
 ## About
 
 This project implements **ERC-8004**, a protocol that enables discovering, choosing, and interacting with agents across organizational boundaries without pre-existing trust. It provides three core registries:

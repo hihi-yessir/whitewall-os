@@ -109,11 +109,10 @@ contract WorldIDValidator is OwnableUpgradeable, UUPSUpgradeable {
           $.worldIdRouter = worldIdRouter_;                                                  
           $.identityRegistry = identityRegistry_;                                            
             
-          // external nullifier = hash(appId, actionId)                                      
-          $.externalNullifier = uint256(keccak256(abi.encodePacked(                          
-              keccak256(abi.encodePacked(appId_)),                                           
-              keccak256(abi.encodePacked(actionId_))                                         
-          )));                                                                               
+          // external nullifier = hashToField(abi.encodePacked(hashToField(appId), actionId))
+          // Must match World ID's ByteHasher.hashToField pattern (keccak256 >> 8)
+          uint256 appIdHash = uint256(keccak256(abi.encodePacked(appId_))) >> 8;
+          $.externalNullifier = uint256(keccak256(abi.encodePacked(appIdHash, actionId_))) >> 8;                                                                               
     }                                                                                      
                                                                                           
     // ============ Main Functions ============                                            
@@ -150,8 +149,9 @@ contract WorldIDValidator is OwnableUpgradeable, UUPSUpgradeable {
         if ($.nullifierUsed[nullifierHash]) {                                              
             revert NullifierAlreadyUsed(nullifierHash);                                    
         }
-        // 5. signal = agent 소유자 주소 (검증 대상 바인딩)                                
-        uint256 signalHash = uint256(keccak256(abi.encodePacked(agentOwner)));
+        // 5. signal = agent 소유자 주소 (검증 대상 바인딩)
+        // Must use hashToField (>> 8) to match World ID's ZK circuit
+        uint256 signalHash = uint256(keccak256(abi.encodePacked(agentOwner))) >> 8;
         // 6. WorldID 증명 검증 (실패시 revert)
         try IWorldID($.worldIdRouter).verifyProof(
             root,                                                                          
@@ -277,6 +277,6 @@ contract WorldIDValidator is OwnableUpgradeable, UUPSUpgradeable {
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}   
                                                                                             
     function getVersion() external pure returns (string memory) {                          
-        return "1.0.0";                                                                    
+        return "1.1.0";                                                                    
     }                                                                                      
 }             

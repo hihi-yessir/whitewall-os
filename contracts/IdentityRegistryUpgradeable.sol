@@ -9,19 +9,20 @@ import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/interfaces/IERC1271.sol";
 
 contract IdentityRegistryUpgradeable is
-    ERC721URIStorageUpgradeable,
-    OwnableUpgradeable,
-    UUPSUpgradeable,
-    EIP712Upgradeable
+    ERC721URIStorageUpgradeable,//NFT, URI 관리
+    OwnableUpgradeable, //owner 권한
+    UUPSUpgradeable, //업그레이드 가능
+    EIP712Upgradeable //EIP-712 서명 검증
 {
     struct MetadataEntry {
-        string metadataKey;
-        bytes metadataValue;
+        string metadataKey; //키 (예: "agentWallet", "name", "category")
+        bytes metadataValue; //값 (bytes로 아무거나 저장 가능) 
     }
 
     /// @custom:storage-location erc7201:erc8004.identity.registry
     struct IdentityRegistryStorage {
-        uint256 _lastId;
+        uint256 _lastId; //마지막 발급된 agentId
+
         // agentId => metadataKey => metadataValue (includes "agentWallet")
         mapping(uint256 => mapping(string => bytes)) _metadata;
     }
@@ -40,10 +41,14 @@ contract IdentityRegistryUpgradeable is
     event MetadataSet(uint256 indexed agentId, string indexed indexedMetadataKey, string metadataKey, bytes metadataValue);
     event URIUpdated(uint256 indexed agentId, string newURI, address indexed updatedBy);
 
+    //EIP-7212 서명용 타입 해시
     bytes32 private constant AGENT_WALLET_SET_TYPEHASH =
         keccak256("AgentWalletSet(uint256 agentId,address newWallet,address owner,uint256 deadline)");
+    //컨트랙트 지갑 서명 검증용 
     bytes4 private constant ERC1271_MAGICVALUE = 0x1626ba7e;
+    //서명 유효기간 최대 5분
     uint256 private constant MAX_DEADLINE_DELAY = 5 minutes;
+    //예약된 메타데이터 키(agentWallet)
     bytes32 private constant RESERVED_AGENT_WALLET_KEY_HASH = keccak256("agentWallet");
 
     /// @custom:oz-upgrades-unsafe-allow constructor
@@ -57,25 +62,28 @@ contract IdentityRegistryUpgradeable is
         __EIP712_init("ERC8004IdentityRegistry", "1");
     }
 
+    //기본 agent 등록
     function register() external returns (uint256 agentId) {
         IdentityRegistryStorage storage $ = _getIdentityRegistryStorage();
         agentId = $._lastId++;
-        $._metadata[agentId]["agentWallet"] = abi.encodePacked(msg.sender);
-        _safeMint(msg.sender, agentId);
+        $._metadata[agentId]["agentWallet"] = abi.encodePacked(msg.sender);//기본 지갑 = 등록자
+        _safeMint(msg.sender, agentId); //NFT 발행
         emit Registered(agentId, "", msg.sender);
         emit MetadataSet(agentId, "agentWallet", "agentWallet", abi.encodePacked(msg.sender));
     }
 
+    //uri 포함 agent 등록
     function register(string memory agentURI) external returns (uint256 agentId) {
         IdentityRegistryStorage storage $ = _getIdentityRegistryStorage();
         agentId = $._lastId++;
         $._metadata[agentId]["agentWallet"] = abi.encodePacked(msg.sender);
         _safeMint(msg.sender, agentId);
-        _setTokenURI(agentId, agentURI);
+        _setTokenURI(agentId, agentURI); //openzeppelin ERC721URIStorage의 _setTokenURI 사용
         emit Registered(agentId, agentURI, msg.sender);
         emit MetadataSet(agentId, "agentWallet", "agentWallet", abi.encodePacked(msg.sender));
     }
 
+    //uri, 메타데이터 포함 agent 등록
     function register(string memory agentURI, MetadataEntry[] memory metadata) external returns (uint256 agentId) {
         IdentityRegistryStorage storage $ = _getIdentityRegistryStorage();
         agentId = $._lastId++;
@@ -84,6 +92,7 @@ contract IdentityRegistryUpgradeable is
         _setTokenURI(agentId, agentURI);
         emit Registered(agentId, agentURI, msg.sender);
         emit MetadataSet(agentId, "agentWallet", "agentWallet", abi.encodePacked(msg.sender));
+
 
         for (uint256 i; i < metadata.length; i++) {
             require(keccak256(bytes(metadata[i].metadataKey)) != RESERVED_AGENT_WALLET_KEY_HASH, "reserved key");
@@ -110,7 +119,7 @@ contract IdentityRegistryUpgradeable is
         $._metadata[agentId][metadataKey] = metadataValue;
         emit MetadataSet(agentId, metadataKey, metadataKey, metadataValue);
     }
-
+    
     function setAgentURI(uint256 agentId, string calldata newURI) external {
         address owner = ownerOf(agentId);
         require(

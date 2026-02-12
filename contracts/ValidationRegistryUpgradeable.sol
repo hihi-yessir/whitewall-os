@@ -44,11 +44,11 @@ contract ValidationRegistryUpgradeable is OwnableUpgradeable, UUPSUpgradeable {
     /// @custom:storage-location erc7201:erc8004.validation.registry
     struct ValidationRegistryStorage {
         // requestHash => validation status
-        mapping(bytes32 => ValidationStatus) validations;
+        mapping(bytes32 => ValidationStatus) validations;//검증 요청 해시 -> 검증 상태(ValidationStatus 타입)
         // agentId => list of requestHashes
-        mapping(uint256 => bytes32[]) _agentValidations;
+        mapping(uint256 => bytes32[]) _agentValidations; //agent별 검증 요청 해시 목록
         // validatorAddress => list of requestHashes
-        mapping(address => bytes32[]) _validatorRequests;
+        mapping(address => bytes32[]) _validatorRequests;//검증자별 검증 요청 해시 목록
     }
 
     // keccak256(abi.encode(uint256(keccak256("erc8004.validation.registry")) - 1)) & ~bytes32(uint256(0xff))
@@ -76,10 +76,10 @@ contract ValidationRegistryUpgradeable is OwnableUpgradeable, UUPSUpgradeable {
     }
 
     function validationRequest(
-        address validatorAddress,
-        uint256 agentId,
-        string calldata requestURI,
-        bytes32 requestHash
+        address validatorAddress, //누구에게 검증
+        uint256 agentId, //어떤 agent
+        string calldata requestURI, //검증 요청 URI
+        bytes32 requestHash //검증 요청 해시
     ) external {
         ValidationRegistryStorage storage $ = _getValidationRegistryStorage();
         require(validatorAddress != address(0), "bad validator");
@@ -113,11 +113,11 @@ contract ValidationRegistryUpgradeable is OwnableUpgradeable, UUPSUpgradeable {
     }
 
     function validationResponse(
-        bytes32 requestHash,
-        uint8 response,
-        string calldata responseURI,
-        bytes32 responseHash,
-        string calldata tag
+        bytes32 requestHash, //검증 요청 해시
+        uint8 response, //0~100
+        string calldata responseURI, //검증 응답 URI
+        bytes32 responseHash, //검증 응답 해시
+        string calldata tag //태그
     ) external {
         ValidationRegistryStorage storage $ = _getValidationRegistryStorage();
         ValidationStatus storage s = $.validations[requestHash];
@@ -145,11 +145,11 @@ contract ValidationRegistryUpgradeable is OwnableUpgradeable, UUPSUpgradeable {
 
     function getSummary(
         uint256 agentId,
-        address[] calldata validatorAddresses,
+        address[] calldata validatorAddresses, //필터링할 검증자 주소 목록(없으면 전체)
         string calldata tag
     ) external view returns (uint64 count, uint8 avgResponse) {
         ValidationRegistryStorage storage $ = _getValidationRegistryStorage();
-        uint256 totalResponse;
+        uint256 totalResponse; //합계 응답 값
 
         bytes32[] storage requestHashes = $._agentValidations[agentId];
 

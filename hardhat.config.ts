@@ -2,18 +2,14 @@ import "@nomicfoundation/hardhat-ethers";
 
 import type { HardhatUserConfig } from "hardhat/config";
 
-import hardhatToolboxViemPlugin from "@nomicfoundation/hardhat-toolbox-viem";
+// Use individual plugins instead of toolbox to avoid hardhat-ignition dependency conflict
+import hardhatViemPlugin from "@nomicfoundation/hardhat-viem";
 import dotenv from "dotenv";
 
 dotenv.config();
 
 const config: HardhatUserConfig = {
-  plugins: [hardhatToolboxViemPlugin],
-  verify: {
-    etherscan: {
-      apiKey: process.env.ETHERSCAN_API_KEY || "",
-    }
-  },
+  plugins: [hardhatViemPlugin],
   chainDescriptors: {
     1: {
       name: "Ethereum Mainnet",
@@ -79,18 +75,23 @@ const config: HardhatUserConfig = {
       type: "edr-simulated",
       chainType: "op",
     },
-    sepolia: {
-      type: "http",
-      chainType: "l1",
-      url: process.env.SEPOLIA_RPC_URL || "",
-      accounts: process.env.SEPOLIA_PRIVATE_KEY ? [process.env.SEPOLIA_PRIVATE_KEY] : [],
-    },
-    mainnet: {
-      type: "http",
-      chainType: "l1",
-      url: process.env.MAINNET_RPC_URL || "",
-      accounts: process.env.MAINNET_PRIVATE_KEY ? [process.env.MAINNET_PRIVATE_KEY] : [],
-    },
+    // Sepolia and mainnet only included when env vars are set
+    ...(process.env.SEPOLIA_RPC_URL ? {
+      sepolia: {
+        type: "http" as const,
+        chainType: "l1" as const,
+        url: process.env.SEPOLIA_RPC_URL,
+        accounts: process.env.SEPOLIA_PRIVATE_KEY ? [process.env.SEPOLIA_PRIVATE_KEY] : [],
+      }
+    } : {}),
+    ...(process.env.MAINNET_RPC_URL ? {
+      mainnet: {
+        type: "http" as const,
+        chainType: "l1" as const,
+        url: process.env.MAINNET_RPC_URL,
+        accounts: process.env.MAINNET_PRIVATE_KEY ? [process.env.MAINNET_PRIVATE_KEY] : [],
+      }
+    } : {}),
     baseSepolia: {
       type: "http",
       chainType: "op",

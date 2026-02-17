@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: MIT                                                            
 pragma solidity ^0.8.20;                                                                   
                                                                                             
-import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";              
-import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";                
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts/utils/Strings.sol";                
                                                                                             
 /// @notice WorldID 검증 인터페이스 (Worldcoin 공식)                                       
 interface IWorldID {                                                                       
@@ -28,7 +29,8 @@ interface IIdentityRegistry {
 /// @title WorldIDValidator                                                                
 /// @notice WorldID 증명을 검증하고 IdentityRegistry에 "humanVerified" 메타데이터를 설정
 /// @dev Agent 소유자가 이 컨트랙트를 approve 해야 setMetadata 호출 가능
-contract WorldIDValidator is OwnableUpgradeable, UUPSUpgradeable {                                                                                             
+contract WorldIDValidator is OwnableUpgradeable, UUPSUpgradeable {
+    using Strings for uint256;                                                                                             
     // ============ Events ============                                                                                                                                           
     event HumanVerified(
         uint256 indexed agentId, //검증된 agent ID
@@ -63,8 +65,11 @@ contract WorldIDValidator is OwnableUpgradeable, UUPSUpgradeable {
         mapping(uint256 => bool) nullifierUsed;
         // nullifierHash => agentId (어떤 agent가 이 nullifier 사용했는지)                 
         mapping(uint256 => uint256) nullifierToAgent; //이걸 Policy 더블체크 하자요
-        // agentId => 검증 정보 
-        mapping(uint256 => VerificationData) verifications;                                
+        // agentId => 검증 정보
+        mapping(uint256 => VerificationData) verifications;
+        // V2: per-agent external nullifier support
+        uint256 appIdHash;          // hashToField(appId) — stored for per-agent nullifier computation
+        string actionPrefix;        // e.g. "verify-owner-" — concatenated with agentId for per-agent action
     }                                                                                      
                                                                                             
     struct VerificationData {                                                              
@@ -112,9 +117,23 @@ contract WorldIDValidator is OwnableUpgradeable, UUPSUpgradeable {
           // external nullifier = hashToField(abi.encodePacked(hashToField(appId), actionId))
           // Must match World ID's ByteHasher.hashToField pattern (keccak256 >> 8)
           uint256 appIdHash = uint256(keccak256(abi.encodePacked(appId_))) >> 8;
-          $.externalNullifier = uint256(keccak256(abi.encodePacked(appIdHash, actionId_))) >> 8;                                                                               
-    }                                                                                      
-                                                                                          
+          $.externalNullifier = uint256(keccak256(abi.encodePacked(appIdHash, actionId_))) >> 8;
+    }
+
+    /// @notice V2 migration: enable per-agent external nullifiers
+    /// @dev Call once after upgrading to V1.2.0. Stores appIdHash and actionPrefix
+    ///      so the contract can compute per-agent external nullifiers matching the frontend.
+    /// @param appId_ Same app ID used in initialize (e.g. "app_staging_dae27f9b14a30e0e0917797aceac795a")
+    /// @param actionPrefix_ Action prefix (e.g. "verify-owner-") — agentId is appended at runtime
+    function initializeV2(
+        string calldata appId_,
+        string calldata actionPrefix_
+    ) public reinitializer(2) {
+        WorldIDValidatorStorage storage $ = _getStorage();
+        $.appIdHash = uint256(keccak256(abi.encodePacked(appId_))) >> 8;
+        $.actionPrefix = actionPrefix_;
+    }
+
     // ============ Main Functions ============                                            
 
     /// @notice WorldID 증명을 검증하고 agent에 humanVerified 태그 설정 
@@ -145,21 +164,33 @@ contract WorldIDValidator is OwnableUpgradeable, UUPSUpgradeable {
         if ($.verifications[agentId].isVerified) {                                         
             revert AlreadyVerified(agentId);                                               
         }                                                                                  
-        // 4. nullifier 재사용 방지 (한 사람이 여러 agent 검증 불가) -> nullifierHash 사용기록이겟지               
-        if ($.nullifierUsed[nullifierHash]) {                                              
-            revert NullifierAlreadyUsed(nullifierHash);                                    
+        // 4. nullifier 재사용 방지 (per-agent nullifier — 같은 사람이 같은 agent 재검증 불가)
+        if ($.nullifierUsed[nullifierHash]) {
+            revert NullifierAlreadyUsed(nullifierHash);
         }
         // 5. signal = agent 소유자 주소 (검증 대상 바인딩)
         // Must use hashToField (>> 8) to match World ID's ZK circuit
         uint256 signalHash = uint256(keccak256(abi.encodePacked(agentOwner))) >> 8;
-        // 6. WorldID 증명 검증 (실패시 revert)
+        // 6. Compute per-agent external nullifier:
+        //    hashToField(abi.encodePacked(appIdHash, actionPrefix + agentId.toString()))
+        //    This matches frontend IDKitWidget action="verify-owner-{agentId}"
+        uint256 extNullifier;
+        if ($.appIdHash != 0) {
+            // V2: per-agent nullifier
+            string memory action = string(abi.encodePacked($.actionPrefix, agentId.toString()));
+            extNullifier = uint256(keccak256(abi.encodePacked($.appIdHash, action))) >> 8;
+        } else {
+            // V1 fallback: global nullifier (for agents verified before upgrade)
+            extNullifier = $.externalNullifier;
+        }
+        // 7. WorldID 증명 검증 (실패시 revert)
         try IWorldID($.worldIdRouter).verifyProof(
-            root,                                                                          
-            GROUP_ID,                                                                      
-            signalHash,                                                                    
-            nullifierHash,                                                                 
-            $.externalNullifier,                                                           
-            proof                                                                          
+            root,
+            GROUP_ID,
+            signalHash,
+            nullifierHash,
+            extNullifier,
+            proof
         ) {                                                                                
             // 검증 성공                                                                   
         } catch {                                                                          
@@ -277,6 +308,6 @@ contract WorldIDValidator is OwnableUpgradeable, UUPSUpgradeable {
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}   
                                                                                             
     function getVersion() external pure returns (string memory) {                          
-        return "1.1.0";                                                                    
+        return "1.2.0";                                                                    
     }                                                                                      
 }             

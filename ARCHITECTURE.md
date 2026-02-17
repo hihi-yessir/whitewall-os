@@ -1,6 +1,6 @@
 # Whitewall OS Architecture (Current State)
 
-> Last updated: 2025-02-14
+> Last updated: 2026-02-18
 > Chain: Base Sepolia (84532)
 
 ---
@@ -39,19 +39,23 @@ Three integration levels:
 - `getAgentWallet(agentId)` — agent's operating wallet (EOA or CA)
 - Stores arbitrary metadata via ERC-8004
 
-**ValidationRegistryUpgradeable** — "Is this agent verified?"
+**ValidationRegistryUpgradeable** — "Is this agent verified?" (async validators)
 - Request/response pattern: `validationRequest()` → `validationResponse()`
 - `getSummary(agentId, validators, tag)` — count + avg score for a tag
-- Tags: `"HUMAN_VERIFIED"`, etc.
-- **Person B's CRE bonding workflow writes here directly** (not through ACE)
+- Reserved for future async validators: KYC, reputation, TEE attestation
+- NOT used for World ID human verification (sync on-chain ZK proof doesn't fit async pattern)
 
-**WorldIDValidator** — "Validate World ID proofs"
-- Verifies ZK proofs from World ID
-- Acts as a validator in ValidationRegistry
+**WorldIDValidator** (v1.2.0) — "Prove human ownership via World ID"
+- Verifies ZK proofs on-chain via `IWorldID.verifyProof()`
+- Writes `"humanVerified"` metadata to IdentityRegistry (dual-write for tamper resistance)
+- Tracks nullifiers internally (`verifications[agentId].isVerified` — tamper-proof source of truth)
+- Per-agent external nullifiers: `initializeV2(appId, actionPrefix)` — one human can verify multiple agents
+- Self-contained: no CRE, no ValidationRegistry dependency
 
 ### 2.2 ACE Layer (Access Control Engine) — ACCESS only
 
-> Bonding does NOT go through ACE. CRE writes directly to ValidationRegistry.
+> Human verification does NOT go through ACE. WorldIDValidator handles it directly on-chain.
+> CRE is used for ACCESS workflows and future async validators.
 
 **WhitewallConsumer** — Entry point for ACCESS requests
 - Inherits `PolicyProtected` (Chainlink ACE)
@@ -73,18 +77,21 @@ Three integration levels:
 [4] reason           (bytes32)  — keccak256("reason")
 ```
 
-**HumanVerifiedPolicy** — On-chain safety net (double protection)
+**HumanVerifiedPolicy** — On-chain safety net (5-check protection)
 - Called by PolicyEngine with mapped parameters
-- 4 sequential checks:
+- `configure(identityRegistry, worldIdValidator, requiredTier)`
+- 5 sequential checks:
 
 ```
-Check 1: approved == true?                    (CRE report value)
-Check 2: tier >= requiredTier (2)?            (CRE report value)
-Check 3: IdentityRegistry.ownerOf(agentId)    (ON-CHAIN read)
-Check 4: ValidationRegistry.getSummary(...)   (ON-CHAIN read)
+Check 1: approved == true?                              (CRE report value)
+Check 2: tier >= requiredTier (2)?                      (CRE report value)
+Check 3: IdentityRegistry.ownerOf(agentId)              (ON-CHAIN — registered?)
+Check 4: IdentityRegistry.getMetadata("humanVerified")  (ON-CHAIN — metadata exists?)
+Check 5: WorldIDValidator.isHumanVerified(agentId)      (ON-CHAIN — tamper-proof confirm)
 ```
 
-- Checks 3-4 are independent of CRE — even if CRE is compromised, on-chain state is verified directly
+- Checks 3-5 are independent of CRE — even if CRE is compromised, on-chain state is verified directly
+- Check 5 prevents metadata spoofing: owner could `approve(self)` then `setMetadata("humanVerified", fake)` to bypass ZK proof. WorldIDValidator's internal state can only be set via `verifyAndSetHumanTag()` which requires a valid ZK proof.
 
 **PolicyEngine** (vendored from chainlink-ace)
 - Orchestrator: extract → map → policy → allow/reject
@@ -106,25 +113,28 @@ Check 4: ValidationRegistry.getSummary(...)   (ON-CHAIN read)
 
 ## 3. Access Control Flow
 
-### 3.1 Bonding (Human Verification) — Person B
+### 3.1 Bonding (Human Verification) — WorldIDValidator (sync, on-chain)
 
 ```
-Human submits World ID proof
+1. Agent owner calls IdentityRegistry.approve(worldIdValidator, agentId)
     ↓
-ValidationRegistry.validationRequest(worldIdValidator, agentId, ...)
-    ↓ (emits ValidationRequested event)
-CRE Bonding Workflow detects event
+2. Frontend: IDKit generates World ID ZK proof (per-agent action: "verify-owner-{agentId}")
     ↓
-CRE: Confidential HTTP → World ID API → verify proof
+3. Agent owner calls WorldIDValidator.verifyAndSetHumanTag(agentId, root, nullifierHash, proof)
     ↓
-CRE: sybil check (nullifier)
-    ↓
-ValidationRegistry.validationResponse(hash, score, ..., "HUMAN_VERIFIED")
-    ↓
-Bond recorded on-chain
+4. WorldIDValidator:
+   → checks agent approved + caller is owner
+   → checks nullifier not reused
+   → computes per-agent external nullifier: hashToField(appIdHash + actionPrefix + agentId)
+   → IWorldID.verifyProof() — on-chain ZK verification (reverts if invalid)
+   → nullifierUsed[hash] = true (sybil protection)
+   → verifications[agentId].isVerified = true (tamper-proof record)
+   → IdentityRegistry.setMetadata(agentId, "humanVerified", encodedData)
+   → emit HumanVerified(agentId, owner, nullifier, timestamp)
 ```
 
-**No ACE involved.** CRE writes directly to ValidationRegistry.
+**No CRE involved.** Atomic, single-tx, trustless on-chain verification.
+CRE is reserved for future async validators (KYC, reputation).
 
 ### 3.2 Access Request — Person A (ACE Pipeline)
 
@@ -143,10 +153,11 @@ WhitewallExtractor.extract()
   → parse report → (agentId, approved, tier, accountableHuman, reason)
     ↓
 HumanVerifiedPolicy.run()
-  → Check 1: CRE approved?              ✅/❌
-  → Check 2: tier >= 2?                 ✅/❌
-  → Check 3: IdentityRegistry.ownerOf() ✅/❌  ← on-chain
-  → Check 4: ValidationRegistry.getSummary() ✅/❌  ← on-chain
+  → Check 1: CRE approved?                          ✅/❌
+  → Check 2: tier >= 2?                             ✅/❌
+  → Check 3: IdentityRegistry.ownerOf()              ✅/❌  ← on-chain
+  → Check 4: IdentityRegistry.getMetadata("humanVerified") ✅/❌  ← on-chain
+  → Check 5: WorldIDValidator.isHumanVerified()      ✅/❌  ← on-chain (tamper-proof)
     ↓
 All pass → PolicyResult.Allowed
     ↓
@@ -245,8 +256,8 @@ onReport selector: `0x805f2132` = `bytes4(keccak256("onReport(bytes,bytes)"))`
 - **Next**: TypeScript SDK, MCP Server
 
 ### Person B (in progress)
-- CRE Bonding Workflow (World ID → ValidationRegistry)
 - CRE Access Workflow (read registries → sign report → Forwarder → WhitewallConsumer)
+- CRE workflows for future async validators (KYC, reputation → ValidationRegistry)
 - ResourceGateway (demo dApp)
 - Dashboard
 - After CRE deploy: call `WhitewallConsumer.setForwarder(realForwarderAddress)`
@@ -261,9 +272,13 @@ Chain: Base Sepolia (84532)
 Report format:
   abi.encode(uint256 agentId, bool approved, uint8 tier, address accountableHuman, bytes32 reason)
 
-Bonding:
-  Write directly to ValidationRegistry (0x8004Cb1BF31DAf7788923b405b754f57acEB4272)
-  validationResponse(requestHash, score, uri, hash, "HUMAN_VERIFIED")
+Human verification (already handled — no CRE needed):
+  WorldIDValidator (0x1258F013d1BA690Dc73EA89Fd48F86E86AD0f124) handles this directly.
+  Frontend → verifyAndSetHumanTag() → IdentityRegistry metadata + internal state.
+
+Future async validators (CRE → ValidationRegistry):
+  ValidationRegistry (0x8004Cb1BF31DAf7788923b405b754f57acEB4272)
+  validationRequest() → CRE picks up → off-chain processing → validationResponse()
 ```
 
 ---
@@ -272,8 +287,10 @@ Bonding:
 
 | Decision | Choice | Why |
 |----------|--------|-----|
-| BOND vs ACCESS separation | BOND bypasses ACE, goes directly to ValidationRegistry | ACE is for access control, not data recording. ValidationRegistry already has validator pattern. |
-| Double protection | On-chain policy reads registries independently | Even if CRE is compromised, on-chain checks catch fake reports |
+| Human verification is sync on-chain | WorldIDValidator verifies ZK proofs directly, writes to IdentityRegistry metadata | CRE async pattern doesn't fit sync ZK verification. No oracle trust assumption needed. Nullifier tracking must be atomic. |
+| Dual-write tamper resistance | WorldIDValidator writes BOTH internal state + IdentityRegistry metadata | Policy checks both: metadata could be spoofed by owner, but internal state can only be set via valid ZK proof |
+| ValidationRegistry for async only | KYC, reputation, TEE attestation go through CRE → ValidationRegistry | ERC-8004 async request/response pattern fits off-chain validators, not on-chain ZK proofs |
+| 5-check protection | Policy reads IdentityRegistry + WorldIDValidator independently | Even if CRE is compromised, on-chain checks catch fake reports. Even if metadata is spoofed, Check 5 catches it. |
 | Report format | No actionType field | Only ACCESS goes through ACE, so no need to distinguish |
 | Proxy pattern | ERC1967Proxy + UUPS | Upgradeable for all stateful contracts |
 | Extractor is stateless | No proxy for WhitewallExtractor | Pure function, no storage needed |

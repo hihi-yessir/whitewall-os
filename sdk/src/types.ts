@@ -6,7 +6,6 @@ export interface AgentStatus {
   tier: number;
   owner: Address;
   agentWallet: Address;
-  validationCount: bigint;
 }
 
 export interface AccessGrantedEvent {
@@ -15,9 +14,4 @@ export interface AccessGrantedEvent {
   tier: number;
   blockNumber: bigint;
   transactionHash: `0x${string}`;
-}
-
-export interface ValidationSummary {
-  count: bigint;
-  avgScore: number;
 }

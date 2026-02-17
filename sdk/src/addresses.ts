@@ -10,7 +10,6 @@ export interface WhitewallOSAddresses {
 /** Protocol-level policy config, read from on-chain HumanVerifiedPolicy */
 export interface PolicyConfig {
   identityRegistry: Address;
-  validationRegistry: Address;
   worldIdValidator: Address;
   requiredTier: number;
 }

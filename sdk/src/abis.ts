@@ -17,13 +17,6 @@ export const humanVerifiedPolicyAbi = [
   },
   {
     inputs: [],
-    name: "getValidationRegistry",
-    outputs: [{ name: "", type: "address" }],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [],
     name: "getWorldIdValidator",
     outputs: [{ name: "", type: "address" }],
     stateMutability: "view",
@@ -189,6 +182,13 @@ export const worldIdValidatorAbi = [
     name: "verifyAndSetHumanTag",
     outputs: [],
     stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [{ name: "agentId", type: "uint256" }],
+    name: "isHumanVerified",
+    outputs: [{ name: "", type: "bool" }],
+    stateMutability: "view",
     type: "function",
   },
 ] as const;

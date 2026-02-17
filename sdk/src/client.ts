@@ -12,13 +12,11 @@ import { baseSepolia } from "viem/chains";
 import {
   humanVerifiedPolicyAbi,
   identityRegistryAbi,
-  validationRegistryAbi,
+  worldIdValidatorAbi,
   whitewallConsumerAbi,
 } from "./abis.js";
 import { addresses, type ChainName, type WhitewallOSAddresses, type PolicyConfig } from "./addresses.js";
-import type { AgentStatus, AccessGrantedEvent, ValidationSummary } from "./types.js";
-
-const HUMAN_VERIFIED_TAG = "HUMAN_VERIFIED";
+import type { AgentStatus, AccessGrantedEvent } from "./types.js";
 
 const chainMap: Record<ChainName, Chain> = {
   baseSepolia,
@@ -61,17 +59,12 @@ export class WhitewallOS {
 
   /** Read policy configuration from the on-chain HumanVerifiedPolicy contract */
   private async loadPolicyConfig(): Promise<void> {
-    const [identityRegistry, validationRegistry, worldIdValidator, requiredTier] =
+    const [identityRegistry, worldIdValidator, requiredTier] =
       await Promise.all([
         this.client.readContract({
           address: this.addrs.humanVerifiedPolicy,
           abi: humanVerifiedPolicyAbi,
           functionName: "getIdentityRegistry",
-        }),
-        this.client.readContract({
-          address: this.addrs.humanVerifiedPolicy,
-          abi: humanVerifiedPolicyAbi,
-          functionName: "getValidationRegistry",
         }),
         this.client.readContract({
           address: this.addrs.humanVerifiedPolicy,
@@ -85,7 +78,7 @@ export class WhitewallOS {
         }),
       ]);
 
-    this.policy = { identityRegistry, validationRegistry, worldIdValidator, requiredTier };
+    this.policy = { identityRegistry, worldIdValidator, requiredTier };
   }
 
   private get policyConfig(): PolicyConfig {
@@ -110,8 +103,12 @@ export class WhitewallOS {
   }
 
   async isHumanVerified(agentId: bigint): Promise<boolean> {
-    const summary = await this.getValidationSummary(agentId);
-    return summary.count > 0n && summary.avgScore >= this.policyConfig.requiredTier;
+    return this.client.readContract({
+      address: this.policyConfig.worldIdValidator,
+      abi: worldIdValidatorAbi,
+      functionName: "isHumanVerified",
+      args: [agentId],
+    });
   }
 
   async getOwner(agentId: bigint): Promise<Address> {
@@ -150,27 +147,6 @@ export class WhitewallOS {
     });
   }
 
-  // ─── Validation ───
-
-  async getValidationSummary(agentId: bigint): Promise<ValidationSummary> {
-    const [count, avgResponse] = await this.client.readContract({
-      address: this.policyConfig.validationRegistry,
-      abi: validationRegistryAbi,
-      functionName: "getSummary",
-      args: [agentId, [this.policyConfig.worldIdValidator], HUMAN_VERIFIED_TAG],
-    });
-    return { count: BigInt(count), avgScore: avgResponse };
-  }
-
-  async getAgentValidations(agentId: bigint): Promise<readonly `0x${string}`[]> {
-    return this.client.readContract({
-      address: this.policyConfig.validationRegistry,
-      abi: validationRegistryAbi,
-      functionName: "getAgentValidations",
-      args: [agentId],
-    });
-  }
-
   // ─── Composite: Full Status ───
 
   async getAgentStatus(agentId: bigint): Promise<AgentStatus> {
@@ -182,26 +158,23 @@ export class WhitewallOS {
         tier: 0,
         owner: zeroAddress,
         agentWallet: zeroAddress,
-        validationCount: 0n,
       };
     }
 
-    const [owner, agentWallet, summary] = await Promise.all([
+    const [owner, agentWallet, humanVerified] = await Promise.all([
       this.getOwner(agentId),
       this.getAgentWallet(agentId),
-      this.getValidationSummary(agentId),
+      this.isHumanVerified(agentId),
     ]);
 
-    const isHumanVerified = summary.count > 0n && summary.avgScore >= this.policyConfig.requiredTier;
-    const tier = isHumanVerified ? this.policyConfig.requiredTier : 1;
+    const tier = humanVerified ? this.policyConfig.requiredTier : 1;
 
     return {
       isRegistered: true,
-      isHumanVerified,
+      isHumanVerified: humanVerified,
       tier,
       owner,
       agentWallet,
-      validationCount: summary.count,
     };
   }
 

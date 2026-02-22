@@ -193,6 +193,140 @@ export const worldIdValidatorAbi = [
   },
 ] as const;
 
+// ── StripeKYCValidator ──
+
+export const stripeKYCValidatorAbi = [
+  {
+    inputs: [{ name: "agentId", type: "uint256" }],
+    name: "isKYCVerified",
+    outputs: [{ name: "", type: "bool" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [{ name: "agentId", type: "uint256" }],
+    name: "getKYCData",
+    outputs: [
+      { name: "verified", type: "bool" },
+      { name: "sessionHash", type: "bytes32" },
+      { name: "verifiedAt", type: "uint256" },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+] as const;
+
+// ── PlaidCreditValidator ──
+
+export const plaidCreditValidatorAbi = [
+  {
+    inputs: [{ name: "agentId", type: "uint256" }],
+    name: "getCreditScore",
+    outputs: [{ name: "", type: "uint8" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [{ name: "agentId", type: "uint256" }],
+    name: "hasCreditScore",
+    outputs: [{ name: "", type: "bool" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [{ name: "agentId", type: "uint256" }],
+    name: "getCreditData",
+    outputs: [
+      { name: "score", type: "uint8" },
+      { name: "dataHash", type: "bytes32" },
+      { name: "verifiedAt", type: "uint256" },
+      { name: "hasScore", type: "bool" },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+] as const;
+
+// ── KYCPolicy ──
+
+export const kycPolicyAbi = [
+  {
+    inputs: [],
+    name: "getRequiredTier",
+    outputs: [{ name: "", type: "uint8" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "getIdentityRegistry",
+    outputs: [{ name: "", type: "address" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "getWorldIdValidator",
+    outputs: [{ name: "", type: "address" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "getStripeKYCValidator",
+    outputs: [{ name: "", type: "address" }],
+    stateMutability: "view",
+    type: "function",
+  },
+] as const;
+
+// ── CreditPolicy ──
+
+export const creditPolicyAbi = [
+  {
+    inputs: [],
+    name: "getRequiredTier",
+    outputs: [{ name: "", type: "uint8" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "getMinCreditScore",
+    outputs: [{ name: "", type: "uint8" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "getIdentityRegistry",
+    outputs: [{ name: "", type: "address" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "getWorldIdValidator",
+    outputs: [{ name: "", type: "address" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "getStripeKYCValidator",
+    outputs: [{ name: "", type: "address" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "getPlaidCreditValidator",
+    outputs: [{ name: "", type: "address" }],
+    stateMutability: "view",
+    type: "function",
+  },
+] as const;
+
 // ── WhitewallConsumer ──
 
 export const whitewallConsumerAbi = [

@@ -328,3 +328,305 @@ cd sdk && npx tsx examples/check-agent.ts 1
 # Go
 cd sdk-go && go test -run TestCrossSDKConsistency -v
 ```
+
+---
+
+## 8. ⚠️ WorldIDValidator v1.2.0 — Per-Agent Nullifier 변경사항
+
+> **날짜:** 2025-02-17
+> **영향 범위:** WorldIDValidator 컨트랙트 + 프론트엔드 데모
+
+### 변경 이유
+
+기존 v1.1.0은 **글로벌 externalNullifier**를 사용 → 한 사람이 하나의 agent만 검증 가능했음.
+Whitewall의 모델은 "한 인간이 여러 agent를 소유하고, 각각을 검증"이므로 이 제한을 해제해야 했음.
+
+### 변경 내용
+
+| 항목 | v1.1.0 (이전) | v1.2.0 (현재) |
+|------|---------------|---------------|
+| **externalNullifier** | 글로벌 (appId + actionId로 한 번 계산, 저장) | **per-agent** (appIdHash + actionPrefix + agentId로 매번 계산) |
+| **nullifierHash** | 동일 인간 = 동일 해시 (모든 agent에 대해) | 동일 인간이라도 **agent마다 다른 해시** |
+| **한 인간의 agent 검증 수** | 1개 (NullifierAlreadyUsed 에러) | **무제한** |
+| **프론트 action 문자열** | `"verify-owner"` (고정) | `"verify-owner-{agentId}"` (동적) |
+
+### 스토리지 변경 (WorldIDValidatorStorage)
+
+기존 필드 뒤에 2개 추가 (UUPS 업그레이드 안전):
+```solidity
+uint256 appIdHash;     // hashToField(appId) — per-agent nullifier 계산용
+string actionPrefix;   // "verify-owner-" — agentId와 합쳐서 action 생성
+```
+
+### 새 함수: `initializeV2`
+
+```solidity
+function initializeV2(
+    string calldata appId_,        // "app_staging_dae27f9b14a30e0e0917797aceac795a"
+    string calldata actionPrefix_  // "verify-owner-"
+) public reinitializer(2)
+```
+
+**배포 후 반드시 호출해야 함.** `appIdHash`가 0이면 v1 fallback으로 글로벌 nullifier 사용.
+
+### `verifyAndSetHumanTag` 변경 로직
+
+```solidity
+// V2: per-agent nullifier
+if ($.appIdHash != 0) {
+    string memory action = string(abi.encodePacked($.actionPrefix, agentId.toString()));
+    extNullifier = uint256(keccak256(abi.encodePacked($.appIdHash, action))) >> 8;
+} else {
+    // V1 fallback: 기존 글로벌 nullifier
+    extNullifier = $.externalNullifier;
+}
+```
+
+### CRE/Gateway에 미치는 영향
+
+| 항목 | 영향 |
+|------|------|
+| **CRE Bonding Workflow** | ❌ 영향 없음 — CRE는 `validationRequest`/`validationResponse`를 통해 ValidationRegistry에 기록하므로 WorldIDValidator와 직접 상호작용하지 않음 |
+| **CRE Access Workflow** | ❌ 영향 없음 — `getSummary`는 ValidationRegistry에서 읽으므로 nullifier 방식과 무관 |
+| **SDK (`getAgentStatus`, `isHumanVerified`)** | ❌ 영향 없음 — 검증 여부 조회는 `verifications[agentId].isVerified`를 읽는 것이므로 nullifier와 무관 |
+| **프론트엔드 데모** | ✅ 변경됨 — IDKitWidget의 `action` prop이 `"verify-owner-{agentId}"`로 변경 |
+| **온체인 human→agent 연결** | ⚠️ 변경됨 — nullifier 기반 연결 불가. `ownerOf(agentId)`로 연결해야 함 (아래 참조) |
+
+### Human → Agent 관계 조회 방법 (변경 후)
+
+```
+// 이전 (v1.1.0): nullifier 매칭
+getVerificationData(824).nullifierHash == getVerificationData(825).nullifierHash → 같은 인간
+
+// 이후 (v1.2.0): 소유권 매칭
+IdentityRegistry.ownerOf(824) == IdentityRegistry.ownerOf(825) → 같은 인간
+```
+
+SDK에서는 nullifier 기반 연결을 사용하지 않으므로 **SDK 변경 불필요**.
+
+### 배포 순서
+
+```
+1. 새 implementation 컨트랙트 배포
+2. proxy.upgradeTo(newImpl)
+3. proxy.initializeV2(
+       "app_staging_dae27f9b14a30e0e0917797aceac795a",
+       "verify-owner-"
+   )
+4. getVersion() → "1.2.0" 확인
+```
+
+### 주의사항
+
+- `initializeV2` 호출 전까지는 v1 방식(글로벌 nullifier)으로 동작
+- **기존에 검증된 agent(#824 등)는 영향 없음** — 이미 `isVerified == true`이므로 재검증 필요 없음
+- `revokeVerification` 후 재검증 시: nullifier가 여전히 `nullifierUsed`에 남아있으므로 같은 인간이 같은 agent를 재검증하려면 nullifier를 수동으로 풀어야 함 (별도 admin 함수 필요 — 현재 미구현)
+
+---
+
+## 9. KYC + Credit 검증 (Confidential HTTP) — 2026-02-22 추가
+
+> **핵심:** Stripe Identity (KYC) + Plaid (Credit Score)를 Chainlink CRE **Confidential HTTP**로 구현 완료.
+> API 키는 DON vault(TEE 엔클레이브)에 저장 — 개별 노드에 노출되지 않음.
+> 응답은 AES-GCM으로 암호화되어 DON 네트워크를 통과.
+
+### 9.1 새로 배포된 컨트랙트 (Base Sepolia)
+
+| 컨트랙트 | 주소 | 용도 |
+|----------|------|------|
+| StripeKYCValidator | `0x4e66fe730ae5476e79e70769c379663df4c61a8b` | Stripe Identity KYC 결과 저장 |
+| PlaidCreditValidator | `0xceb46c0f2704d2191570bd81b622200097af9ade` | Plaid 신용점수 저장 (0-100) |
+| KYCPolicy | `0xcc2998899ef3d4a0695340a8e548fe6b4527f2f5` | Tier 3 정책 (6개 체크) |
+| CreditPolicy | `0xc53951d8f16016d43b1153a6889cf69d444bb5e9` | Tier 4 정책 (8개 체크) |
+
+### 9.2 티어 모델 (변경됨)
+
+데모에서는 KYC + Credit을 **단일 Tier 3**으로 통합. Premium 리소스가 없으므로 Tier 4는 사용하지 않음.
+
+| Tier | 검증 | 리소스 |
+|:---:|------|--------|
+| 0 | 없음 | DENIED |
+| 1 | 등록 (ERC-8004 NFT) | 기본 API |
+| 2 | + World ID | 이미지 생성 |
+| 3 | + KYC (Stripe) + Credit (Plaid) | 비디오 생성 |
+
+온체인 컨트랙트는 Tier 3/4 분리 배포되어 있으나, **데모에서는 두 검증을 하나의 단계로 표시**.
+
+### 9.3 CRE KYC Bonding Workflow (Confidential HTTP)
+
+**워크플로우 파일:** `workflows/kyc-workflow/main.ts`
+
+```
+ValidationRequest(stripeKYCValidator, agentId, "stripe:<sessionId>", requestHash)
+    ↓ (ValidationRegistry에서 이벤트 발생)
+CRE Log Trigger → kyc-workflow 실행
+    ↓
+Confidential HTTP: GET https://api.stripe.com/v1/identity/verification_sessions/{sessionId}
+  - Authorization: Basic {{.STRIPE_SECRET_KEY_B64}}
+  - 시크릿은 DON vault(TEE)에서 주입 — {{.SECRET_NAME}} 템플릿 구문
+  - encryptOutput: true (AES-GCM 암호화 응답)
+    ↓
+파싱: status == "verified" → score=100, verified=true
+      status != "verified" → score=0, verified=false
+    ↓
+리포트: abi.encode(uint256 agentId, bool verified, bytes32 requestHash, bytes32 sessionHash)
+    ↓
+writeReport → Forwarder → StripeKYCValidator.onReport()
+    ↓
+StripeKYCValidator:
+  - isKYCVerified[agentId] = verified
+  - ValidationRegistry.validationResponse(requestHash, score, ...)
+```
+
+**Stripe sessionId 흐름:**
+1. 유저가 프론트에서 Stripe Identity 세션 완료
+2. 백엔드가 sessionId를 받아서 `validationRequest`의 requestURI에 포함: `"stripe:vs_xxxx"`
+3. CRE가 이벤트에서 sessionId를 추출하여 Stripe API 호출
+
+### 9.4 CRE Credit Bonding Workflow (Confidential HTTP)
+
+**워크플로우 파일:** `workflows/credit-workflow/main.ts`
+
+```
+ValidationRequest(plaidCreditValidator, agentId, "plaid:<agentId>", requestHash)
+    ↓ (ValidationRegistry에서 이벤트 발생)
+CRE Log Trigger → credit-workflow 실행
+    ↓
+Confidential HTTP: POST https://sandbox.plaid.com/accounts/balance/get
+  - body: {"client_id":"{{.PLAID_CLIENT_ID}}","secret":"{{.PLAID_SECRET}}","access_token":"{{.PLAID_ACCESS_TOKEN}}"}
+  - 시크릿 3개 모두 DON vault(TEE)에서 주입
+  - encryptOutput: true (AES-GCM 암호화 응답)
+    ↓
+파싱 → 신용점수 계산 (0-100):
+  - 총 잔액 가중치: 40점
+  - 계좌 수 가중치: 10점
+  - 마이너스 잔액 없음: 30점
+  - 계좌 유형 다양성: 20점
+    ↓
+리포트: abi.encode(uint256 agentId, uint8 score, bytes32 requestHash, bytes32 dataHash)
+    ↓
+writeReport → Forwarder → PlaidCreditValidator.onReport()
+    ↓
+PlaidCreditValidator:
+  - creditScores[agentId] = score
+  - ValidationRegistry.validationResponse(requestHash, score, ...)
+```
+
+### 9.5 시크릿 설정
+
+**secrets.yaml** (프로젝트 루트):
+```yaml
+secretsNames:
+  STRIPE_SECRET_KEY_B64:
+    - STRIPE_SECRET_KEY_B64
+  PLAID_CLIENT_ID:
+    - PLAID_CLIENT_ID
+  PLAID_SECRET:
+    - PLAID_SECRET
+  PLAID_ACCESS_TOKEN:
+    - PLAID_ACCESS_TOKEN
+```
+
+**.env** (시뮬레이션용 — 실제 DON에서는 vault에 저장):
+```
+STRIPE_SECRET_KEY_B64=<base64 encoded stripe secret key>
+PLAID_CLIENT_ID=<plaid client id>
+PLAID_SECRET=<plaid secret>
+PLAID_ACCESS_TOKEN=<plaid access token>
+```
+
+**매핑:** `.env` 변수 → `secrets.yaml` 키 이름 → 워크플로우에서 `{{.KEY_NAME}}`으로 참조
+
+### 9.6 Access Workflow 변경사항
+
+**예슬이 만드는 CRE Access Workflow**에서 기존 체크에 추가로 읽어야 하는 항목:
+
+```
+기존 (Tier 2):
+  Gate 1: IdentityRegistry.ownerOf(agentId) → 등록 여부
+  Gate 2: WorldIDValidator.isHumanVerified(agentId) → 인간 검증
+
+추가 (Tier 3):
+  Gate 3: StripeKYCValidator.isKYCVerified(agentId) → KYC 완료 여부
+  Gate 4: PlaidCreditValidator.getCreditScore(agentId) → 신용점수 (>= 50이면 통과)
+```
+
+**Validator 인터페이스:**
+```solidity
+// StripeKYCValidator (0x4e66fe730ae5476e79e70769c379663df4c61a8b)
+function isKYCVerified(uint256 agentId) external view returns (bool);
+function getKYCData(uint256 agentId) external view returns (
+    bool verified, bytes32 sessionHash, uint256 verifiedAt
+);
+
+// PlaidCreditValidator (0xceb46c0f2704d2191570bd81b622200097af9ade)
+function getCreditScore(uint256 agentId) external view returns (uint8);
+function hasCreditScore(uint256 agentId) external view returns (bool);
+function getCreditData(uint256 agentId) external view returns (
+    uint8 score, bytes32 dataHash, uint256 verifiedAt, bool hasScore
+);
+```
+
+**리포트 포맷 (변경됨):**
+```solidity
+abi.encode(
+    uint256 agentId,
+    bool    approved,
+    uint8   tier,             // 2 = Human, 3 = Human+KYC+Credit
+    address accountableHuman,
+    bytes32 reason
+)
+```
+
+### 9.7 워크플로우 실행 방법
+
+**주의: CRE CLI v1.1.0 이상 필수** (`cre update`로 업데이트). v1.0.9에서는 시크릿 템플릿이 해석되지 않음.
+
+```bash
+# 1. ValidationRequest 트랜잭션 발행
+npx hardhat run scripts/fire-validation-request.ts --network baseSepolia
+
+# 2. KYC 워크플로우 시뮬레이션 (출력된 tx hash 사용)
+cre workflow simulate ./workflows/kyc-workflow \
+  --target local-simulation \
+  --trigger-index 0 \
+  --evm-tx-hash <kyc_tx_hash> \
+  --evm-event-index 0 \
+  --non-interactive --broadcast
+
+# 3. Credit 워크플로우 시뮬레이션
+cre workflow simulate ./workflows/credit-workflow \
+  --target local-simulation \
+  --trigger-index 0 \
+  --evm-tx-hash <credit_tx_hash> \
+  --evm-event-index 0 \
+  --non-interactive --broadcast
+
+# 4. 온체인 결과 확인
+npx hardhat run scripts/verify-onchain.ts --network baseSepolia
+```
+
+### 9.8 E2E 테스트 결과 (2026-02-22)
+
+| 워크플로우 | Agent | API 결과 | 온체인 결과 |
+|-----------|-------|---------|------------|
+| KYC (Stripe) | #998 | `status=verified` | `isKYCVerified(998) = true` |
+| Credit (Plaid) | #998 | 12 accounts, score=100 | `getCreditScore(998) = 100` |
+
+두 워크플로우 모두 `confidential-http@1.0.0-alpha` 캐퍼빌리티를 사용하여 실제 API 호출 + 온체인 기록 성공.
+
+### 9.9 예슬 작업 체크리스트 (KYC/Credit 관련)
+
+| # | 작업 | 설명 |
+|---|------|------|
+| 1 | Access Workflow에 Gate 3/4 추가 | `isKYCVerified()`, `getCreditScore()` 읽기 추가 |
+| 2 | 티어 계산 로직 | Gate 1+2 통과 → tier=2, Gate 1+2+3+4 통과 → tier=3 |
+| 3 | Forwarder 설정 | KYC/Credit Validator 컨트랙트에도 실제 Forwarder 주소 등록 필요 |
+| 4 | Gateway → CRE 연동 | 게이트웨이가 `ValidationRequest` tx를 발행하면 CRE 노드가 워크플로우 실행 |
+
+**Forwarder 설정 대상 (3개 컨트랙트 모두):**
+```solidity
+WhitewallConsumer(0xec3114ea...).setForwarder(realForwarderAddress)
+StripeKYCValidator(0x4e66fe73...).setForwarder(realForwarderAddress)  // 새로 추가
+PlaidCreditValidator(0xceb46c0f...).setForwarder(realForwarderAddress) // 새로 추가
+```

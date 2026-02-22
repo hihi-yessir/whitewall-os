@@ -4,12 +4,13 @@ import type { HardhatUserConfig } from "hardhat/config";
 
 // Use individual plugins instead of toolbox to avoid hardhat-ignition dependency conflict
 import hardhatViemPlugin from "@nomicfoundation/hardhat-viem";
+import hardhatNodeTestRunner from "@nomicfoundation/hardhat-node-test-runner";
 import dotenv from "dotenv";
 
 dotenv.config();
 
 const config: HardhatUserConfig = {
-  plugins: [hardhatViemPlugin],
+  plugins: [hardhatViemPlugin, hardhatNodeTestRunner],
   chainDescriptors: {
     1: {
       name: "Ethereum Mainnet",

@@ -1,0 +1,6 @@
+{
+  "validationRegistryAddress": "0x8004Cb1BF31DAf7788923b405b754f57acEB4272",
+  "stripeKYCValidatorAddress": "0x4e66fe730ae5476e79e70769c379663df4c61a8b",
+  "chainSelectorName": "ethereum-testnet-sepolia-base-1",
+  "gasLimit": "500000"
+}

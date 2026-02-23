@@ -14,9 +14,13 @@ import {
   identityRegistryAbi,
   worldIdValidatorAbi,
   whitewallConsumerAbi,
+  stripeKYCValidatorAbi,
+  plaidCreditValidatorAbi,
+  kycPolicyAbi,
+  creditPolicyAbi,
 } from "./abis.js";
 import { addresses, type ChainName, type WhitewallOSAddresses, type PolicyConfig } from "./addresses.js";
-import type { AgentStatus, AccessGrantedEvent } from "./types.js";
+import type { AgentStatus, FullAgentStatus, AccessGrantedEvent } from "./types.js";
 
 const chainMap: Record<ChainName, Chain> = {
   baseSepolia,
@@ -79,6 +83,41 @@ export class WhitewallOS {
       ]);
 
     this.policy = { identityRegistry, worldIdValidator, requiredTier };
+
+    // Optionally load KYC/credit validator addresses from policy contracts
+    if (this.addrs.kycPolicy) {
+      try {
+        const kycValidator = await this.client.readContract({
+          address: this.addrs.kycPolicy,
+          abi: kycPolicyAbi,
+          functionName: "getStripeKYCValidator",
+        });
+        this.policy.stripeKYCValidator = kycValidator;
+      } catch {
+        // KYC policy not deployed yet — skip
+      }
+    }
+
+    if (this.addrs.creditPolicy) {
+      try {
+        const [creditValidator, minCreditScore] = await Promise.all([
+          this.client.readContract({
+            address: this.addrs.creditPolicy,
+            abi: creditPolicyAbi,
+            functionName: "getPlaidCreditValidator",
+          }),
+          this.client.readContract({
+            address: this.addrs.creditPolicy,
+            abi: creditPolicyAbi,
+            functionName: "getMinCreditScore",
+          }),
+        ]);
+        this.policy.plaidCreditValidator = creditValidator;
+        this.policy.minCreditScore = minCreditScore;
+      } catch {
+        // Credit policy not deployed yet — skip
+      }
+    }
   }
 
   private get policyConfig(): PolicyConfig {
@@ -147,6 +186,38 @@ export class WhitewallOS {
     });
   }
 
+  // ─── KYC & Credit Read Methods ───
+
+  async isKYCVerified(agentId: bigint): Promise<boolean> {
+    const addr = this.policyConfig.stripeKYCValidator ?? this.addrs.stripeKYCValidator;
+    if (!addr) return false;
+    try {
+      return await this.client.readContract({
+        address: addr,
+        abi: stripeKYCValidatorAbi,
+        functionName: "isKYCVerified",
+        args: [agentId],
+      });
+    } catch {
+      return false;
+    }
+  }
+
+  async getCreditScore(agentId: bigint): Promise<number> {
+    const addr = this.policyConfig.plaidCreditValidator ?? this.addrs.plaidCreditValidator;
+    if (!addr) return 0;
+    try {
+      return await this.client.readContract({
+        address: addr,
+        abi: plaidCreditValidatorAbi,
+        functionName: "getCreditScore",
+        args: [agentId],
+      });
+    } catch {
+      return 0;
+    }
+  }
+
   // ─── Composite: Full Status ───
 
   async getAgentStatus(agentId: bigint): Promise<AgentStatus> {
@@ -175,6 +246,42 @@ export class WhitewallOS {
       tier,
       owner,
       agentWallet,
+    };
+  }
+
+  async getFullStatus(agentId: bigint): Promise<FullAgentStatus> {
+    const base = await this.getAgentStatus(agentId);
+    if (!base.isRegistered) {
+      return {
+        ...base,
+        isKYCVerified: false,
+        creditScore: 0,
+        effectiveTier: 0,
+      };
+    }
+
+    const [kycVerified, creditScore] = await Promise.all([
+      this.isKYCVerified(agentId),
+      this.getCreditScore(agentId),
+    ]);
+
+    // Compute effective tier (cumulative):
+    // 0 = not registered, 1 = registered, 2 = human verified,
+    // 3 = + KYC, 4 = + credit score
+    let effectiveTier = base.tier; // 1 or 2
+    if (base.isHumanVerified && kycVerified) {
+      effectiveTier = 3;
+      const minScore = this.policyConfig.minCreditScore ?? 50;
+      if (creditScore >= minScore) {
+        effectiveTier = 4;
+      }
+    }
+
+    return {
+      ...base,
+      isKYCVerified: kycVerified,
+      creditScore,
+      effectiveTier,
     };
   }
 

@@ -8,6 +8,12 @@ export interface AgentStatus {
   agentWallet: Address;
 }
 
+export interface FullAgentStatus extends AgentStatus {
+  isKYCVerified: boolean;
+  creditScore: number;
+  effectiveTier: number; // 0-4 computed from all verification states
+}
+
 export interface AccessGrantedEvent {
   agentId: bigint;
   accountableHuman: Address;

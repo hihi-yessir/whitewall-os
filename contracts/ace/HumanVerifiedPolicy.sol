@@ -20,9 +20,11 @@ interface IWorldIDValidatorReader {
  *         Independently verifies agent status against on-chain registries —
  *         even if CRE is compromised, this policy blocks unverified agents.
  *
- * Double protection checks:
+ *         Last policy in the chain — reverts for tier < 2 (the floor).
+ *
+ * 5-check protection (when tier >= 2):
  *   1. CRE report says approved == true
- *   2. tier >= requiredTier
+ *   2. tier >= requiredTier (2) — reverts (last in chain, no fallback)
  *   3. IdentityRegistry: agent is registered (ownerOf doesn't revert)
  *   4. IdentityRegistry: agent has "humanVerified" metadata (set by WorldIDValidator)
  *   5. WorldIDValidator: independently confirms verification (tamper-proof — cannot be faked via setMetadata)

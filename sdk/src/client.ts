@@ -10,14 +10,12 @@ import {
 } from "viem";
 import { baseSepolia } from "viem/chains";
 import {
-  humanVerifiedPolicyAbi,
+  tieredPolicyAbi,
   identityRegistryAbi,
   worldIdValidatorAbi,
   whitewallConsumerAbi,
   stripeKYCValidatorAbi,
   plaidCreditValidatorAbi,
-  kycPolicyAbi,
-  creditPolicyAbi,
 } from "./abis.js";
 import { addresses, type ChainName, type WhitewallOSAddresses, type PolicyConfig } from "./addresses.js";
 import type { AgentStatus, FullAgentStatus, AccessGrantedEvent } from "./types.js";
@@ -45,7 +43,7 @@ export class WhitewallOS {
 
   /**
    * Create and connect a WhitewallOS instance.
-   * Reads policy config from on-chain HumanVerifiedPolicy contract.
+   * Reads policy config from on-chain TieredPolicy contract.
    */
   static async connect(config: WhitewallOSConfig): Promise<WhitewallOS> {
     const addrs = addresses[config.chain];
@@ -61,63 +59,44 @@ export class WhitewallOS {
     return instance;
   }
 
-  /** Read policy configuration from the on-chain HumanVerifiedPolicy contract */
+  /** Read policy configuration from the on-chain TieredPolicy contract */
   private async loadPolicyConfig(): Promise<void> {
-    const [identityRegistry, worldIdValidator, requiredTier] =
+    const [identityRegistry, worldIdValidator, stripeKYCValidator, plaidCreditValidator, minCreditScore] =
       await Promise.all([
         this.client.readContract({
-          address: this.addrs.humanVerifiedPolicy,
-          abi: humanVerifiedPolicyAbi,
+          address: this.addrs.tieredPolicy,
+          abi: tieredPolicyAbi,
           functionName: "getIdentityRegistry",
         }),
         this.client.readContract({
-          address: this.addrs.humanVerifiedPolicy,
-          abi: humanVerifiedPolicyAbi,
+          address: this.addrs.tieredPolicy,
+          abi: tieredPolicyAbi,
           functionName: "getWorldIdValidator",
         }),
         this.client.readContract({
-          address: this.addrs.humanVerifiedPolicy,
-          abi: humanVerifiedPolicyAbi,
-          functionName: "getRequiredTier",
+          address: this.addrs.tieredPolicy,
+          abi: tieredPolicyAbi,
+          functionName: "getStripeKYCValidator",
+        }),
+        this.client.readContract({
+          address: this.addrs.tieredPolicy,
+          abi: tieredPolicyAbi,
+          functionName: "getPlaidCreditValidator",
+        }),
+        this.client.readContract({
+          address: this.addrs.tieredPolicy,
+          abi: tieredPolicyAbi,
+          functionName: "getMinCreditScore",
         }),
       ]);
 
-    this.policy = { identityRegistry, worldIdValidator, requiredTier };
-
-    // Optionally load KYC/credit validator addresses from policy contracts
-    if (this.addrs.kycPolicy) {
-      try {
-        const kycValidator = await this.client.readContract({
-          address: this.addrs.kycPolicy,
-          abi: kycPolicyAbi,
-          functionName: "getStripeKYCValidator",
-        });
-        this.policy.stripeKYCValidator = kycValidator;
-      } catch {
-        // KYC policy not deployed yet — skip
-      }
-    }
-
-    if (this.addrs.creditPolicy) {
-      try {
-        const [creditValidator, minCreditScore] = await Promise.all([
-          this.client.readContract({
-            address: this.addrs.creditPolicy,
-            abi: creditPolicyAbi,
-            functionName: "getPlaidCreditValidator",
-          }),
-          this.client.readContract({
-            address: this.addrs.creditPolicy,
-            abi: creditPolicyAbi,
-            functionName: "getMinCreditScore",
-          }),
-        ]);
-        this.policy.plaidCreditValidator = creditValidator;
-        this.policy.minCreditScore = minCreditScore;
-      } catch {
-        // Credit policy not deployed yet — skip
-      }
-    }
+    this.policy = {
+      identityRegistry,
+      worldIdValidator,
+      stripeKYCValidator,
+      plaidCreditValidator,
+      minCreditScore,
+    };
   }
 
   private get policyConfig(): PolicyConfig {
@@ -238,7 +217,7 @@ export class WhitewallOS {
       this.isHumanVerified(agentId),
     ]);
 
-    const tier = humanVerified ? this.policyConfig.requiredTier : 1;
+    const tier = humanVerified ? 2 : 1;
 
     return {
       isRegistered: true,

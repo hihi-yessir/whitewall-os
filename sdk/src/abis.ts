@@ -1,13 +1,6 @@
-// ── HumanVerifiedPolicy — entry point, SDK reads config from here ──
+// ── TieredPolicy — unified policy, SDK reads all config from here ──
 
-export const humanVerifiedPolicyAbi = [
-  {
-    inputs: [],
-    name: "getRequiredTier",
-    outputs: [{ name: "", type: "uint8" }],
-    stateMutability: "view",
-    type: "function",
-  },
+export const tieredPolicyAbi = [
   {
     inputs: [],
     name: "getIdentityRegistry",
@@ -19,6 +12,27 @@ export const humanVerifiedPolicyAbi = [
     inputs: [],
     name: "getWorldIdValidator",
     outputs: [{ name: "", type: "address" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "getStripeKYCValidator",
+    outputs: [{ name: "", type: "address" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "getPlaidCreditValidator",
+    outputs: [{ name: "", type: "address" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "getMinCreditScore",
+    outputs: [{ name: "", type: "uint8" }],
     stateMutability: "view",
     type: "function",
   },
@@ -247,85 +261,8 @@ export const plaidCreditValidatorAbi = [
   },
 ] as const;
 
-// ── KYCPolicy ──
-
-export const kycPolicyAbi = [
-  {
-    inputs: [],
-    name: "getRequiredTier",
-    outputs: [{ name: "", type: "uint8" }],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [],
-    name: "getIdentityRegistry",
-    outputs: [{ name: "", type: "address" }],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [],
-    name: "getWorldIdValidator",
-    outputs: [{ name: "", type: "address" }],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [],
-    name: "getStripeKYCValidator",
-    outputs: [{ name: "", type: "address" }],
-    stateMutability: "view",
-    type: "function",
-  },
-] as const;
-
-// ── CreditPolicy ──
-
-export const creditPolicyAbi = [
-  {
-    inputs: [],
-    name: "getRequiredTier",
-    outputs: [{ name: "", type: "uint8" }],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [],
-    name: "getMinCreditScore",
-    outputs: [{ name: "", type: "uint8" }],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [],
-    name: "getIdentityRegistry",
-    outputs: [{ name: "", type: "address" }],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [],
-    name: "getWorldIdValidator",
-    outputs: [{ name: "", type: "address" }],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [],
-    name: "getStripeKYCValidator",
-    outputs: [{ name: "", type: "address" }],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [],
-    name: "getPlaidCreditValidator",
-    outputs: [{ name: "", type: "address" }],
-    stateMutability: "view",
-    type: "function",
-  },
-] as const;
+// ── Legacy policy ABIs removed ──
+// KYCPolicy and CreditPolicy replaced by unified TieredPolicy
 
 // ── WhitewallConsumer ──
 

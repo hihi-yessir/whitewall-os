@@ -29,9 +29,12 @@ interface IPlaidCreditValidatorReader {
  *         Superset of KYCPolicy — requires all 6 KYC checks PLUS
  *         tamper-proof credit score from PlaidCreditValidator.
  *
- * 8-check protection:
+ *         Designed for PolicyEngine chaining: returns Continue for tier < 4
+ *         so lower-tier policies (KYCPolicy, HumanVerifiedPolicy) can handle.
+ *
+ * 8-check protection (when tier >= 4):
  *   1. CRE report says approved == true
- *   2. tier >= requiredTier (4)
+ *   2. tier >= requiredTier (4) — else Continue
  *   3. IdentityRegistry: agent is registered
  *   4. IdentityRegistry: agent has "humanVerified" metadata
  *   5. WorldIDValidator: independently confirms human verification
@@ -112,11 +115,11 @@ contract CreditPolicy is Policy {
             revert IPolicyEngine.PolicyRejected("CRE: agent not approved");
         }
 
-        // Check 2: sufficient tier
+        // Check 2: tier routing — not our tier? pass to next policy in chain
         uint8 tier = abi.decode(parameters[2], (uint8));
         CreditPolicyStorage storage $ = _getStorage();
         if (tier < $.requiredTier) {
-            revert IPolicyEngine.PolicyRejected("Insufficient verification tier");
+            return IPolicyEngine.PolicyResult.Continue;
         }
 
         // Check 3: on-chain — agent must be registered

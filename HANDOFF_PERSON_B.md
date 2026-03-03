@@ -11,7 +11,7 @@
 |---|------|------|
 | 1 | **CRE Bonding Workflow** | World ID 증명 검증 → ValidationRegistry에 직접 기록 |
 | 2 | **CRE Access Workflow** | 레지스트리 읽기 → 리포트 생성 → DON 서명 → WhitewallConsumer에 전송 |
-| 3 | **`setForwarder()` 호출** | CRE 배포 후 실제 Forwarder 주소를 Consumer에 등록 |
+| 3 | ~~`setForwarder()` 호출~~ | ✅ **완료** — 3개 컨트랙트 모두 Forwarder 설정됨 |
 | 4 | **ResourceGateway** | 데모 dApp (검증된 에이전트에 토큰 배포) |
 | 5 | **Dashboard** | 파이프라인 시각화 + 데모 UI |
 
@@ -37,7 +37,7 @@
 ### 와이어링 (이미 완료)
 - PolicyEngine → `0x805f2132` (onReport selector) → WhitewallExtractor
 - PolicyEngine → Consumer의 onReport → HumanVerifiedPolicy
-- **Forwarder: `0x0000000000000000000000000000000000000001` (플레이스홀더 — 예슬가 CRE 배포 후 업데이트)**
+- **Forwarder: `0x82300bd7c3958625581cc2F77bC6464dcEcDF3e5` (체인링크 공식 KeystoneForwarder — 설정 완료)**
 
 ---
 
@@ -144,16 +144,17 @@ CRE가 `approved: true, tier: 2`로 리포트를 보내더라도, 온체인 Huma
 
 ---
 
-### 3.3 Forwarder 설정
+### 3.3 Forwarder 설정 (완료)
 
-CRE 배포 후, 실제 Forwarder 주소를 Consumer에 등록해야 함:
+3개 컨트랙트 모두 체인링크 공식 KeystoneForwarder가 설정 완료됨:
 
-```solidity
-WhitewallConsumer(0xec3114ea6bb29f77b63cd1223533870b663120bb)
-    .setForwarder(realForwarderAddress)
-```
+| 컨트랙트 | Forwarder | 상태 |
+|----------|-----------|------|
+| StripeKYCValidator | `0x82300bd7c3958625581cc2F77bC6464dcEcDF3e5` | ✅ 완료 |
+| PlaidCreditValidator | `0x82300bd7c3958625581cc2F77bC6464dcEcDF3e5` | ✅ 완료 |
+| WhitewallConsumer | `0x82300bd7c3958625581cc2F77bC6464dcEcDF3e5` | ✅ 완료 |
 
-**주의:** `setForwarder`는 owner만 호출 가능. 현재 owner는 배포자 주소 `0x21fdEd74C901129977B8e28C2588595163E1e235`.
+별도 작업 필요 없음.
 
 ---
 
@@ -304,8 +305,7 @@ HumanVerifiedPolicy.getRequiredTier()        → 몇 등급부터 "검증됨"인
 
 1. **`tag`는 정확히 `"HUMAN_VERIFIED"`** — 대소문자, 공백 모두 정확해야 함
 2. **`score`는 1 이상** — 0이면 `getSummary`의 `count`에 포함되지만 `avgResponse`가 0이 되어 정책 체크 통과 불가
-3. **Forwarder 업데이트 필수** — 현재 플레이스홀더(`0x01`)이므로, CRE 배포 후 `setForwarder()` 호출 필요
-4. **Owner 권한** — `setForwarder`는 Consumer의 owner만 호출 가능 (`0x21fdEd74C901129977B8e28C2588595163E1e235`)
+3. **Forwarder** — 3개 컨트랙트 모두 `0x82300bd7c3958625581cc2F77bC6464dcEcDF3e5` (체인링크 공식 KeystoneForwarder)로 설정 완료
 5. **이중 보호** — CRE 리포트에 `approved: true`를 넣어도, 실제 온체인 상태가 검증 안 되어 있으면 거부됨. 반드시 본딩을 먼저 완료한 후 접근 요청해야 함.
 
 ---
@@ -621,12 +621,6 @@ npx hardhat run scripts/verify-onchain.ts --network baseSepolia
 |---|------|------|
 | 1 | Access Workflow에 Gate 3/4 추가 | `isKYCVerified()`, `getCreditScore()` 읽기 추가 |
 | 2 | 티어 계산 로직 | Gate 1+2 통과 → tier=2, Gate 1+2+3+4 통과 → tier=3 |
-| 3 | Forwarder 설정 | KYC/Credit Validator 컨트랙트에도 실제 Forwarder 주소 등록 필요 |
-| 4 | Gateway → CRE 연동 | 게이트웨이가 `ValidationRequest` tx를 발행하면 CRE 노드가 워크플로우 실행 |
+| 3 | Gateway → CRE 연동 | 게이트웨이가 `ValidationRequest` tx를 발행하면 CRE 노드가 워크플로우 실행 |
 
-**Forwarder 설정 대상 (3개 컨트랙트 모두):**
-```solidity
-WhitewallConsumer(0xec3114ea...).setForwarder(realForwarderAddress)
-StripeKYCValidator(0x4e66fe73...).setForwarder(realForwarderAddress)  // 새로 추가
-PlaidCreditValidator(0xceb46c0f...).setForwarder(realForwarderAddress) // 새로 추가
-```
+> **참고:** Forwarder는 3개 컨트랙트 모두 `0x82300bd7c3958625581cc2F77bC6464dcEcDF3e5` (체인링크 공식 KeystoneForwarder)로 설정 완료. 별도 작업 필요 없음.

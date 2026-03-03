@@ -4,13 +4,11 @@ export type { AgentStatus, FullAgentStatus, AccessGrantedEvent } from "./types.j
 export type { ChainName, WhitewallOSAddresses, PolicyConfig } from "./addresses.js";
 export { addresses } from "./addresses.js";
 export {
-  humanVerifiedPolicyAbi,
+  tieredPolicyAbi,
   identityRegistryAbi,
   validationRegistryAbi,
   whitewallConsumerAbi,
   worldIdValidatorAbi,
   stripeKYCValidatorAbi,
   plaidCreditValidatorAbi,
-  kycPolicyAbi,
-  creditPolicyAbi,
 } from "./abis.js";

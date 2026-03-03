@@ -24,9 +24,12 @@ interface IStripeKYCValidatorReader {
  *         Superset of HumanVerifiedPolicy — requires all 5 human checks PLUS
  *         tamper-proof KYC verification from StripeKYCValidator.
  *
- * 6-check protection:
+ *         Designed for PolicyEngine chaining: returns Continue for tier < 3
+ *         so lower-tier policies (HumanVerifiedPolicy) can handle.
+ *
+ * 6-check protection (when tier >= 3):
  *   1. CRE report says approved == true
- *   2. tier >= requiredTier (3)
+ *   2. tier >= requiredTier (3) — else Continue
  *   3. IdentityRegistry: agent is registered (ownerOf doesn't revert)
  *   4. IdentityRegistry: agent has "humanVerified" metadata
  *   5. WorldIDValidator: independently confirms human verification
@@ -95,11 +98,11 @@ contract KYCPolicy is Policy {
             revert IPolicyEngine.PolicyRejected("CRE: agent not approved");
         }
 
-        // Check 2: sufficient tier
+        // Check 2: tier routing — not our tier? pass to next policy in chain
         uint8 tier = abi.decode(parameters[2], (uint8));
         KYCPolicyStorage storage $ = _getStorage();
         if (tier < $.requiredTier) {
-            revert IPolicyEngine.PolicyRejected("Insufficient verification tier");
+            return IPolicyEngine.PolicyResult.Continue;
         }
 
         // Check 3: on-chain — agent must be registered

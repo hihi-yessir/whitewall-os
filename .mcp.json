@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "whitewall-os": {
+      "command": "node",
+      "args": ["mcp/dist/index.js"]
+    }
+  }
+}

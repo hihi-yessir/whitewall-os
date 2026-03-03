@@ -5,14 +5,21 @@ import (
 	"math/big"
 )
 
-// AgentStatus is the full verification status of a Whitewall OS agent.
+// AgentStatus is the basic verification status of a Whitewall OS agent.
 type AgentStatus struct {
 	IsRegistered    bool
 	IsHumanVerified bool
 	Tier            uint8
 	Owner           common.Address
 	AgentWallet     common.Address
-	ValidationCount uint64
+}
+
+// FullAgentStatus extends AgentStatus with KYC, credit, and effective tier.
+type FullAgentStatus struct {
+	AgentStatus
+	IsKYCVerified bool
+	CreditScore   uint8
+	EffectiveTier uint8 // 0-4 computed from all verification states
 }
 
 // ValidationSummary holds the result of a getSummary call.

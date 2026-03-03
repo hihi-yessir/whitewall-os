@@ -39,30 +39,27 @@ func TestConnect_ReadsPolicyConfig(t *testing.T) {
 	if cfg.IdentityRegistry == ZeroAddress {
 		t.Error("IdentityRegistry is zero address")
 	}
-	if cfg.ValidationRegistry == ZeroAddress {
-		t.Error("ValidationRegistry is zero address")
-	}
 	if cfg.WorldIDValidator == ZeroAddress {
 		t.Error("WorldIDValidator is zero address")
 	}
-	if cfg.RequiredTier != 2 {
-		t.Errorf("RequiredTier = %d, want 2", cfg.RequiredTier)
+	if cfg.StripeKYCValidator == ZeroAddress {
+		t.Error("StripeKYCValidator is zero address")
 	}
+	if cfg.PlaidCreditValidator == ZeroAddress {
+		t.Error("PlaidCreditValidator is zero address")
+	}
+	t.Logf("MinCreditScore = %d", cfg.MinCreditScore)
 }
 
 func TestConnect_DiscoveredAddressesMatchDeployed(t *testing.T) {
 	a := connectOrSkip(t)
 	cfg := a.GetPolicyConfig()
 
-	expectedIdentity := common.HexToAddress("0x8004A818BFB912233c491871b3d84c89A494BD9e")
-	expectedValidation := common.HexToAddress("0x8004Cb1BF31DAf7788923b405b754f57acEB4272")
-
-	if !strings.EqualFold(cfg.IdentityRegistry.Hex(), expectedIdentity.Hex()) {
-		t.Errorf("IdentityRegistry = %s, want %s", cfg.IdentityRegistry.Hex(), expectedIdentity.Hex())
+	// IdentityRegistry should be a non-zero address read from TieredPolicy
+	if cfg.IdentityRegistry == ZeroAddress {
+		t.Error("IdentityRegistry should be non-zero")
 	}
-	if !strings.EqualFold(cfg.ValidationRegistry.Hex(), expectedValidation.Hex()) {
-		t.Errorf("ValidationRegistry = %s, want %s", cfg.ValidationRegistry.Hex(), expectedValidation.Hex())
-	}
+	t.Logf("IdentityRegistry = %s", cfg.IdentityRegistry.Hex())
 }
 
 func TestConnect_UnsupportedChain(t *testing.T) {
@@ -145,34 +142,6 @@ func TestGetAgentWallet_ExistingAgent(t *testing.T) {
 	t.Logf("Agent #1 wallet: %s", wallet.Hex())
 }
 
-// ─── GetValidationSummary ───
-
-func TestGetValidationSummary_ExistingAgent(t *testing.T) {
-	a := connectOrSkip(t)
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-
-	summary, err := a.GetValidationSummary(ctx, existingAgent)
-	if err != nil {
-		t.Fatalf("GetValidationSummary error: %v", err)
-	}
-	t.Logf("Agent #1 validations: count=%d, avgScore=%d", summary.Count, summary.AvgScore)
-}
-
-func TestGetValidationSummary_NonExistentAgent(t *testing.T) {
-	a := connectOrSkip(t)
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-
-	summary, err := a.GetValidationSummary(ctx, nonExistentAgent)
-	if err != nil {
-		t.Fatalf("GetValidationSummary error: %v", err)
-	}
-	if summary.Count != 0 {
-		t.Errorf("non-existent agent should have 0 validations, got %d", summary.Count)
-	}
-}
-
 // ─── IsHumanVerified ───
 
 func TestIsHumanVerified_ExistingAgent(t *testing.T) {
@@ -184,11 +153,38 @@ func TestIsHumanVerified_ExistingAgent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("IsHumanVerified error: %v", err)
 	}
-	// Agent #1 is not yet human-verified (no World ID bond yet)
 	t.Logf("Agent #1 human verified: %v", verified)
 }
 
-// ─── GetAgentStatus (full composite) ───
+// ─── IsKYCVerified ───
+
+func TestIsKYCVerified_ExistingAgent(t *testing.T) {
+	a := connectOrSkip(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	kycVerified, err := a.IsKYCVerified(ctx, existingAgent)
+	if err != nil {
+		t.Fatalf("IsKYCVerified error: %v", err)
+	}
+	t.Logf("Agent #1 KYC verified: %v", kycVerified)
+}
+
+// ─── GetCreditScore ───
+
+func TestGetCreditScore_ExistingAgent(t *testing.T) {
+	a := connectOrSkip(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	score, err := a.GetCreditScore(ctx, existingAgent)
+	if err != nil {
+		t.Fatalf("GetCreditScore error: %v", err)
+	}
+	t.Logf("Agent #1 credit score: %d", score)
+}
+
+// ─── GetAgentStatus (basic composite) ───
 
 func TestGetAgentStatus_ExistingAgent(t *testing.T) {
 	a := connectOrSkip(t)
@@ -210,9 +206,9 @@ func TestGetAgentStatus_ExistingAgent(t *testing.T) {
 		t.Errorf("tier should be 1 or 2, got %d", status.Tier)
 	}
 
-	t.Logf("Agent #1 status: registered=%v verified=%v tier=%d owner=%s wallet=%s validations=%d",
+	t.Logf("Agent #1 status: registered=%v verified=%v tier=%d owner=%s wallet=%s",
 		status.IsRegistered, status.IsHumanVerified, status.Tier,
-		status.Owner.Hex(), status.AgentWallet.Hex(), status.ValidationCount)
+		status.Owner.Hex(), status.AgentWallet.Hex())
 }
 
 func TestGetAgentStatus_NonExistentAgent(t *testing.T) {
@@ -239,18 +235,53 @@ func TestGetAgentStatus_NonExistentAgent(t *testing.T) {
 	}
 }
 
-// ─── GetAgentValidations ───
+// ─── GetFullStatus ───
 
-func TestGetAgentValidations_ExistingAgent(t *testing.T) {
+func TestGetFullStatus_ExistingAgent(t *testing.T) {
 	a := connectOrSkip(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	hashes, err := a.GetAgentValidations(ctx, existingAgent)
+	full, err := a.GetFullStatus(ctx, existingAgent)
 	if err != nil {
-		t.Fatalf("GetAgentValidations error: %v", err)
+		t.Fatalf("GetFullStatus error: %v", err)
 	}
-	t.Logf("Agent #1 has %d validation records", len(hashes))
+
+	if !full.IsRegistered {
+		t.Error("agent #1 should be registered")
+	}
+	if full.EffectiveTier < 1 {
+		t.Errorf("effectiveTier should be >= 1 for registered agent, got %d", full.EffectiveTier)
+	}
+
+	t.Logf("Agent #1 full status: registered=%v verified=%v kyc=%v credit=%d tier=%d effectiveTier=%d owner=%s wallet=%s",
+		full.IsRegistered, full.IsHumanVerified, full.IsKYCVerified,
+		full.CreditScore, full.Tier, full.EffectiveTier,
+		full.Owner.Hex(), full.AgentWallet.Hex())
+}
+
+func TestGetFullStatus_NonExistentAgent(t *testing.T) {
+	a := connectOrSkip(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	full, err := a.GetFullStatus(ctx, nonExistentAgent)
+	if err != nil {
+		t.Fatalf("GetFullStatus error: %v", err)
+	}
+
+	if full.IsRegistered {
+		t.Error("non-existent agent should not be registered")
+	}
+	if full.EffectiveTier != 0 {
+		t.Errorf("effectiveTier should be 0, got %d", full.EffectiveTier)
+	}
+	if full.IsKYCVerified {
+		t.Error("non-existent agent should not be KYC verified")
+	}
+	if full.CreditScore != 0 {
+		t.Errorf("credit score should be 0, got %d", full.CreditScore)
+	}
 }
 
 // ─── GetTokenURI ───
@@ -269,23 +300,23 @@ func TestGetTokenURI_ExistingAgent(t *testing.T) {
 
 // ─── Policy Config Consistency ───
 
-func TestPolicyConfig_UsedByValidationSummary(t *testing.T) {
+func TestPolicyConfig_AllValidatorsNonZero(t *testing.T) {
 	a := connectOrSkip(t)
 	cfg := a.GetPolicyConfig()
 
-	// The worldIdValidator from policy should be a non-zero address
 	if cfg.WorldIDValidator == ZeroAddress {
 		t.Error("WorldIDValidator should not be zero")
 	}
-
-	// requiredTier should be reasonable
-	if cfg.RequiredTier == 0 || cfg.RequiredTier > 10 {
-		t.Errorf("RequiredTier = %d, seems unreasonable", cfg.RequiredTier)
+	if cfg.StripeKYCValidator == ZeroAddress {
+		t.Error("StripeKYCValidator should not be zero")
+	}
+	if cfg.PlaidCreditValidator == ZeroAddress {
+		t.Error("PlaidCreditValidator should not be zero")
 	}
 
-	t.Logf("Policy: identityRegistry=%s validationRegistry=%s worldIdValidator=%s requiredTier=%d",
-		cfg.IdentityRegistry.Hex(), cfg.ValidationRegistry.Hex(),
-		cfg.WorldIDValidator.Hex(), cfg.RequiredTier)
+	t.Logf("Policy: identityRegistry=%s worldIdValidator=%s stripeKYCValidator=%s plaidCreditValidator=%s minCreditScore=%d",
+		cfg.IdentityRegistry.Hex(), cfg.WorldIDValidator.Hex(),
+		cfg.StripeKYCValidator.Hex(), cfg.PlaidCreditValidator.Hex(), cfg.MinCreditScore)
 }
 
 // ─── Cross-SDK consistency: same results as TS SDK ───

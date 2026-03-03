@@ -2,30 +2,33 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { WhitewallOS, type AgentStatus } from "@whitewall-os/sdk";
+import { WhitewallOS, type FullAgentStatus } from "@whitewall-os/sdk";
 
 const CHAIN = "baseSepolia" as const;
 
 let wos: WhitewallOS;
 
-function formatStatus(agentId: string, status: AgentStatus): string {
+function formatFullStatus(agentId: string, status: FullAgentStatus): string {
   if (!status.isRegistered) {
     return `Agent #${agentId}: NOT REGISTERED\nThis agent does not exist in the Whitewall OS protocol.`;
   }
 
   return [
     `Agent #${agentId}:`,
-    `  Registered:      ${status.isRegistered}`,
-    `  Human Verified:  ${status.isHumanVerified}`,
-    `  Tier:            ${status.tier}`,
-    `  Owner:           ${status.owner}`,
-    `  Agent Wallet:    ${status.agentWallet}`,
+    `  Registered:       ${status.isRegistered}`,
+    `  Human Verified:   ${status.isHumanVerified}`,
+    `  KYC Verified:     ${status.isKYCVerified}`,
+    `  Credit Score:     ${status.creditScore}`,
+    `  Base Tier:        ${status.tier}`,
+    `  Effective Tier:   ${status.effectiveTier}`,
+    `  Owner:            ${status.owner}`,
+    `  Agent Wallet:     ${status.agentWallet}`,
   ].join("\n");
 }
 
 const server = new McpServer({
   name: "whitewall-os",
-  version: "0.1.0",
+  version: "0.2.0",
 });
 
 // ─── Tool: check agent ───
@@ -34,8 +37,8 @@ server.registerTool(
   {
     title: "Check Whitewall OS Agent",
     description:
-      "Quick check: is this agent registered and human-verified in Whitewall OS? " +
-      "Returns whether the agent has a verified human behind it.",
+      "Quick check: is this agent registered and verified in Whitewall OS? " +
+      "Returns human verification, KYC, credit score, and effective tier.",
     inputSchema: z.object({
       agentId: z
         .string()
@@ -44,16 +47,22 @@ server.registerTool(
   },
   async ({ agentId }) => {
     const id = BigInt(agentId);
-    const [registered, verified] = await Promise.all([
-      wos.isRegistered(id),
-      wos.isHumanVerified(id),
-    ]);
+    const status = await wos.getFullStatus(id);
 
-    const text = registered
-      ? verified
-        ? `Agent #${agentId} is VERIFIED — a real human is accountable for this agent.`
-        : `Agent #${agentId} is registered but NOT human-verified. No accountability bond.`
-      : `Agent #${agentId} does NOT exist in Whitewall OS.`;
+    let text: string;
+    if (!status.isRegistered) {
+      text = `Agent #${agentId} does NOT exist in Whitewall OS.`;
+    } else {
+      const parts = [`Agent #${agentId} is registered (Effective Tier ${status.effectiveTier}).`];
+      parts.push(status.isHumanVerified
+        ? "  Human Verified: YES — a real human is accountable for this agent."
+        : "  Human Verified: NO — no accountability bond.");
+      parts.push(status.isKYCVerified
+        ? "  KYC: PASSED"
+        : "  KYC: NOT VERIFIED");
+      parts.push(`  Credit Score: ${status.creditScore}`);
+      text = parts.join("\n");
+    }
 
     return { content: [{ type: "text" as const, text }] };
   },
@@ -66,7 +75,7 @@ server.registerTool(
     title: "Get Whitewall OS Agent Status",
     description:
       "Get full verification status for a Whitewall OS agent: registration, " +
-      "human verification, tier, owner, wallet, and validation count.",
+      "human verification, KYC, credit score, effective tier, owner, and wallet.",
     inputSchema: z.object({
       agentId: z
         .string()
@@ -74,8 +83,8 @@ server.registerTool(
     }),
   },
   async ({ agentId }) => {
-    const status = await wos.getAgentStatus(BigInt(agentId));
-    return { content: [{ type: "text" as const, text: formatStatus(agentId, status) }] };
+    const status = await wos.getFullStatus(BigInt(agentId));
+    return { content: [{ type: "text" as const, text: formatFullStatus(agentId, status) }] };
   },
 );
 

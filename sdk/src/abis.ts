@@ -260,6 +260,17 @@ export const plaidCreditValidatorAbi = [
     type: "function",
   },
   {
+    anonymous: false,
+    inputs: [
+      { indexed: true, name: "agentId", type: "uint256" },
+      { indexed: false, name: "score", type: "uint8" },
+      { indexed: false, name: "dataHash", type: "bytes32" },
+      { indexed: false, name: "timestamp", type: "uint256" },
+    ],
+    name: "CreditScoreSet",
+    type: "event",
+  },
+  {
     inputs: [],
     name: "getSgxConfig",
     outputs: [

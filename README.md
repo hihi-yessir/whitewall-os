@@ -20,6 +20,16 @@ Implementation of the ERC-8004 protocol for agent discovery and trust through re
 #### Base Sepolia
 - **IdentityRegistry**: [`0x8004A818BFB912233c491871b3d84c89A494BD9e`](https://sepolia.basescan.org/address/0x8004A818BFB912233c491871b3d84c89A494BD9e)
 - **ReputationRegistry**: [`0x8004B663056A597Dffe9eCcC1965A193B7388713`](https://sepolia.basescan.org/address/0x8004B663056A597Dffe9eCcC1965A193B7388713)
+- **ValidationRegistry**: [`0x8004Cb1BF31DAf7788923b405b754f57acEB4272`](https://sepolia.basescan.org/address/0x8004Cb1BF31DAf7788923b405b754f57acEB4272)
+
+**Whitewall OS (ACE + Validators)**
+- **PolicyEngine**: [`0xc7afccc4b97786e34c07e4444496256d2f2b0b9a`](https://sepolia.basescan.org/address/0xc7afccc4b97786e34c07e4444496256d2f2b0b9a)
+- **TieredPolicy**: [`0xdb20a5d22cc7eb2a43628527667021121e80e30d`](https://sepolia.basescan.org/address/0xdb20a5d22cc7eb2a43628527667021121e80e30d)
+- **WhitewallConsumer**: [`0x9670cc85a97c07a1bb6353fb968c6a2c153db99f`](https://sepolia.basescan.org/address/0x9670cc85a97c07a1bb6353fb968c6a2c153db99f)
+- **WhitewallExtractor**: [`0xa1c721059cbdc04a7bc6ea0026b82bb0d620979d`](https://sepolia.basescan.org/address/0xa1c721059cbdc04a7bc6ea0026b82bb0d620979d)
+- **WorldIDValidator**: [`0xcadd809084debc999ce93384806da8ea90318e11`](https://sepolia.basescan.org/address/0xcadd809084debc999ce93384806da8ea90318e11)
+- **StripeKYCValidator**: [`0xebba79075ad00a22c5ff9a1f36a379f577265936`](https://sepolia.basescan.org/address/0xebba79075ad00a22c5ff9a1f36a379f577265936)
+- **PlaidCreditValidator**: [`0x07e8653b55a3cd703106c9726a140755204c1ad5`](https://sepolia.basescan.org/address/0x07e8653b55a3cd703106c9726a140755204c1ad5)
 
 
 #### Polygon Mainnet

@@ -5,12 +5,12 @@ import dotenv from "dotenv";
 dotenv.config();
 
 // Deployed addresses
-const POLICY_ENGINE = "0x12816c0c79981726627a550b73e9627b81be95be" as Hex;
-const TIERED_POLICY = "0x63b4d2e051180c3c0313eb71a9bdda8554432e23" as Hex;
-const CONSUMER = "0xb5845901c590f06ffa480c31b96aca7eff4dfb3e" as Hex;
-const EXTRACTOR = "0x27b22cdbbf3b03dde7597ec8ff8640b74aeea58b" as Hex;
-const KYC_VALIDATOR = "0x12b456dcc0e669eeb1d96806c8ef87b713d39cc8" as Hex;
-const CREDIT_VALIDATOR = "0x9a0ed706f1714961bf607404521a58decddc2636" as Hex;
+const POLICY_ENGINE = "0xc7afccc4b97786e34c07e4444496256d2f2b0b9a" as Hex;
+const TIERED_POLICY = "0xdb20a5d22cc7eb2a43628527667021121e80e30d" as Hex;
+const CONSUMER = "0x9670cc85a97c07a1bb6353fb968c6a2c153db99f" as Hex;
+const EXTRACTOR = "0xa1c721059cbdc04a7bc6ea0026b82bb0d620979d" as Hex;
+const KYC_VALIDATOR = "0xebba79075ad00a22c5ff9a1f36a379f577265936" as Hex;
+const CREDIT_VALIDATOR = "0x07e8653b55a3cd703106c9726a140755204c1ad5" as Hex;
 
 const ON_REPORT_SELECTOR = "0x805f2132" as Hex;
 

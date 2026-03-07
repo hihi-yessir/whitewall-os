@@ -1,6 +1,6 @@
 {
   "validationRegistryAddress": "0x8004Cb1BF31DAf7788923b405b754f57acEB4272",
-  "plaidCreditValidatorAddress": "0x9a0ed706f1714961bf607404521a58decddc2636",
+  "plaidCreditValidatorAddress": "0x07e8653b55a3cd703106c9726a140755204c1ad5",
   "chainSelectorName": "ethereum-testnet-sepolia-base-1",
-  "gasLimit": "500000"
+  "gasLimit": "10000000"
 }

@@ -259,6 +259,16 @@ export const plaidCreditValidatorAbi = [
     stateMutability: "view",
     type: "function",
   },
+  {
+    inputs: [],
+    name: "getSgxConfig",
+    outputs: [
+      { name: "verifier", type: "address" },
+      { name: "mrEnclave", type: "bytes32" },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
 ] as const;
 
 // ── Legacy policy ABIs removed ──

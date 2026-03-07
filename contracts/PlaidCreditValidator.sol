@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "./interfaces/ISgxDcapVerifier.sol";
 
 /// @notice IdentityRegistry read interface
 interface IIdentityRegistryCredit {
@@ -23,6 +24,9 @@ interface IValidationRegistryCredit {
 /// @title PlaidCreditValidator
 /// @notice Receives CRE Confidential HTTP reports for Plaid credit score verification.
 ///         Called by CRE Forwarder with credit assessment results from Plaid API.
+///         V2: Optionally verifies Intel SGX DCAP attestation quotes via Automata's
+///         verifyAndAttestOnChain, parsing raw quoteBody at SGX enclave report offsets
+///         (mrEnclave @ 112, reportData @ 368) for hardware-backed execution guarantees.
 ///         Maintains tamper-proof credit score state and writes responses to ValidationRegistry.
 contract PlaidCreditValidator is OwnableUpgradeable, UUPSUpgradeable {
     // ============ Events ============
@@ -40,11 +44,15 @@ contract PlaidCreditValidator is OwnableUpgradeable, UUPSUpgradeable {
     // ============ Storage ============
     /// @custom:storage-location erc7201:whitewall-os.PlaidCreditValidator
     struct PlaidCreditValidatorStorage {
+        // V1 fields (unchanged)
         address forwarderAddress;
         address identityRegistry;
         address validationRegistry;
         mapping(uint256 => uint8) creditScores;
         mapping(uint256 => CreditVerification) verifications;
+        // V2 fields
+        address sgxDcapVerifier;
+        bytes32 expectedMrEnclave;
     }
 
     struct CreditVerification {
@@ -91,17 +99,29 @@ contract PlaidCreditValidator is OwnableUpgradeable, UUPSUpgradeable {
     // ============ CRE Report Handler ============
 
     /// @notice Called by CRE Forwarder with Plaid credit assessment result
-    /// @param report abi.encode(uint256 agentId, uint8 score, bytes32 requestHash, bytes32 dataHash)
+    /// @dev V2: report can be either:
+    ///   V1: abi.encode(uint256 agentId, uint8 score, bytes32 requestHash, bytes32 dataHash)
+    ///   V2: abi.encode(uint256 agentId, uint8 score, bytes32 requestHash, bytes32 dataHash, bytes sgxQuote)
     function onReport(bytes calldata /* metadata */, bytes calldata report) external {
         PlaidCreditValidatorStorage storage $ = _getStorage();
         if (msg.sender != $.forwarderAddress) revert NotForwarder();
 
-        (
-            uint256 agentId,
-            uint8 score,
-            bytes32 requestHash,
-            bytes32 dataHash
-        ) = abi.decode(report, (uint256, uint8, bytes32, bytes32));
+        // Try V2 decode first (5 fields), fallback to V1 (4 fields)
+        uint256 agentId;
+        uint8 score;
+        bytes32 requestHash;
+        bytes32 dataHash;
+        bytes memory sgxQuote;
+
+        if (report.length > 128) {
+            // V2 format: includes sgxQuote as dynamic bytes
+            (agentId, score, requestHash, dataHash, sgxQuote) =
+                abi.decode(report, (uint256, uint8, bytes32, bytes32, bytes));
+        } else {
+            // V1 format: 4 static fields (128 bytes)
+            (agentId, score, requestHash, dataHash) =
+                abi.decode(report, (uint256, uint8, bytes32, bytes32));
+        }
 
         require(score <= 100, "Score exceeds maximum");
 
@@ -110,6 +130,39 @@ contract PlaidCreditValidator is OwnableUpgradeable, UUPSUpgradeable {
             if (owner == address(0)) revert AgentNotRegistered(agentId);
         } catch {
             revert AgentNotRegistered(agentId);
+        }
+
+        // SGX DCAP verification (V2) — Automata verifyAndAttestOnChain
+        if ($.sgxDcapVerifier != address(0) && sgxQuote.length > 0) {
+            (bool success, bytes memory output) =
+                IAutomataDcapV3Attestation($.sgxDcapVerifier).verifyAndAttestOnChain(sgxQuote);
+            require(success, "SGX quote verification failed");
+
+            // Automata returns abi.encodePacked output:
+            //   uint16 quoteVersion (2) + uint16 quoteBodyType (2) + uint8 tcbStatus (1) + bytes6 fmspc (6) = 11 byte header
+            //   followed by 384-byte SGX Enclave Report Body where:
+            //     mrEnclave at report offset 64  → output offset 75
+            //     reportData at report offset 320 → output offset 331
+            bytes32 extractedMrEnclave;
+            bytes32 extractedReportData;
+
+            assembly {
+                extractedMrEnclave := mload(add(add(output, 32), 75))
+                extractedReportData := mload(add(add(output, 32), 331))
+            }
+
+            require(
+                extractedMrEnclave == $.expectedMrEnclave,
+                "Untrusted TEE Code (MRENCLAVE mismatch)"
+            );
+
+            bytes32 expectedHash = sha256(
+                abi.encodePacked("agent:", _uint256ToString(agentId), "|hash:", _bytes32ToHexString(requestHash), "|score:", _uint8ToString(score))
+            );
+            require(
+                extractedReportData == expectedHash,
+                "Data manipulated in transit"
+            );
         }
 
         // Set tamper-proof credit score state
@@ -162,6 +215,14 @@ contract PlaidCreditValidator is OwnableUpgradeable, UUPSUpgradeable {
         return ($.forwarderAddress, $.identityRegistry, $.validationRegistry);
     }
 
+    function getSgxConfig() external view returns (
+        address verifier,
+        bytes32 mrEnclave
+    ) {
+        PlaidCreditValidatorStorage storage $ = _getStorage();
+        return ($.sgxDcapVerifier, $.expectedMrEnclave);
+    }
+
     // ============ Admin Functions ============
 
     function setForwarder(address newForwarder) external onlyOwner {
@@ -169,9 +230,65 @@ contract PlaidCreditValidator is OwnableUpgradeable, UUPSUpgradeable {
         _getStorage().forwarderAddress = newForwarder;
     }
 
+    function setSgxDcapVerifier(address verifier) external onlyOwner {
+        _getStorage().sgxDcapVerifier = verifier;
+    }
+
+    function setExpectedMrEnclave(bytes32 mrEnclave) external onlyOwner {
+        _getStorage().expectedMrEnclave = mrEnclave;
+    }
+
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
     function getVersion() external pure returns (string memory) {
-        return "1.0.0";
+        return "2.0.0";
+    }
+
+    // ============ Internal Helpers ============
+
+    function _uint8ToString(uint8 value) internal pure returns (string memory) {
+        if (value == 0) return "0";
+        uint8 temp = value;
+        uint8 digits;
+        while (temp != 0) {
+            digits++;
+            temp /= 10;
+        }
+        bytes memory buffer = new bytes(digits);
+        while (value != 0) {
+            digits -= 1;
+            buffer[digits] = bytes1(uint8(48 + uint8(value % 10)));
+            value /= 10;
+        }
+        return string(buffer);
+    }
+
+    function _bytes32ToHexString(bytes32 value) internal pure returns (string memory) {
+        bytes memory alphabet = "0123456789abcdef";
+        bytes memory str = new bytes(66); // "0x" + 64 hex chars
+        str[0] = "0";
+        str[1] = "x";
+        for (uint256 i = 0; i < 32; i++) {
+            str[2 + i * 2] = alphabet[uint8(value[i] >> 4)];
+            str[3 + i * 2] = alphabet[uint8(value[i] & 0x0f)];
+        }
+        return string(str);
+    }
+
+    function _uint256ToString(uint256 value) internal pure returns (string memory) {
+        if (value == 0) return "0";
+        uint256 temp = value;
+        uint256 digits;
+        while (temp != 0) {
+            digits++;
+            temp /= 10;
+        }
+        bytes memory buffer = new bytes(digits);
+        while (value != 0) {
+            digits -= 1;
+            buffer[digits] = bytes1(uint8(48 + uint256(value % 10)));
+            value /= 10;
+        }
+        return string(buffer);
     }
 }

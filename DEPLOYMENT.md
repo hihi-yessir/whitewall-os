@@ -1,6 +1,6 @@
 # Whitewall OS — Deployment Report (Base Sepolia)
 
-Last deployed: 2026-02-24
+Last deployed: 2026-03-07
 
 ---
 
@@ -8,22 +8,22 @@ Last deployed: 2026-02-24
 
 ### ACE Stack (UUPS Proxies)
 
-| Contract | Proxy | Implementation | Verified |
-|----------|-------|----------------|----------|
-| PolicyEngine | `0x12816c0c79981726627a550b73e9627b81be95be` | `0xf1e187ac100e6b2d1daf896d36c7f518e04a9547` | Yes |
-| WhitewallExtractor | `0x27b22cdbbf3b03dde7597ec8ff8640b74aeea58b` | (not proxied — stateless) | Yes |
-| TieredPolicy | `0x63b4d2e051180c3c0313eb71a9bdda8554432e23` | `0xf17349229930ce0cd34c60cd9364442aaabc89c9` | Yes |
-| WhitewallConsumer | `0xb5845901c590f06ffa480c31b96aca7eff4dfb3e` | `0x1a1bf7daade6c1bd72dcdc369b1df843255b663b` | Yes |
-| StripeKYCValidator | `0x12b456dcc0e669eeb1d96806c8ef87b713d39cc8` | `0xf6afce65d1414a3d2db10d55ec3057eaa42b0262` | Yes |
-| PlaidCreditValidator | `0x9a0ed706f1714961bf607404521a58decddc2636` | `0xa6549e31519c65282f0aadd753d4dd452f634f97` | Yes |
+| Contract | Proxy | Implementation |
+|----------|-------|----------------|
+| PolicyEngine | `0xc7afccc4b97786e34c07e4444496256d2f2b0b9a` | `0xadfdaffa65ac8b1d79fb8cb75b86e49934cb563a` |
+| WhitewallExtractor | `0xa1c721059cbdc04a7bc6ea0026b82bb0d620979d` | (not proxied — stateless) |
+| TieredPolicy | `0xdb20a5d22cc7eb2a43628527667021121e80e30d` | `0x8a99a5db2d0487e29d760e132908af40f28e99ee` |
+| WhitewallConsumer | `0x9670cc85a97c07a1bb6353fb968c6a2c153db99f` | `0x6d27f83a4bf69ad757b26637c689e6e2e9772083` |
+| StripeKYCValidator | `0xebba79075ad00a22c5ff9a1f36a379f577265936` | `0x2ce72e8931963e739779ad28801444db985da2f2` |
+| PlaidCreditValidator | `0x07e8653b55a3cd703106c9726a140755204c1ad5` | `0x453d99a48902fe021cc88b1f5d77b1ace9c8f449` |
+| WorldIDValidator | `0xcadd809084debc999ce93384806da8ea90318e11` | `0x7b01612a436288f5e40f947be972526650b59e21` |
 
-### Identity Stack (unchanged)
+### ERC-8004 Singletons (unchanged)
 
 | Contract | Address |
 |----------|---------|
 | IdentityRegistryUpgradeable | `0x8004A818BFB912233c491871b3d84c89A494BD9e` |
 | ValidationRegistry | `0x8004Cb1BF31DAf7788923b405b754f57acEB4272` |
-| WorldIDValidator | `0x1258F013d1BA690Dc73EA89Fd48F86E86AD0f124` |
 
 ### Infrastructure
 
@@ -38,11 +38,11 @@ All implementations verified on [Basescan](https://sepolia.basescan.org).
 ## PolicyEngine Wiring
 
 ```
-PolicyEngine (0x1281...)
-  ├── Extractor: WhitewallExtractor (0x27b2...) for onReport selector 0x805f2132
+PolicyEngine (0xc7af...)
+  ├── Extractor: WhitewallExtractor (0xa1c7...) for onReport selector 0x805f2132
   │     Extracts: agentId, approved, tier, accountableHuman, reason
   │
-  └── Policy: TieredPolicy (0x63b4...) for WhitewallConsumer (0xb584...) + onReport
+  └── Policy: TieredPolicy (0xdb20...) for WhitewallConsumer (0x9670...) + onReport
         Base layer (always):
           Check 1: approved == true
           Check 2: tier >= 2

@@ -10,8 +10,8 @@ dotenv.config();
 
 const VALIDATION_REGISTRY = "0x8004Cb1BF31DAf7788923b405b754f57acEB4272" as Hex;
 const IDENTITY_REGISTRY = "0x8004A818BFB912233c491871b3d84c89A494BD9e" as Hex;
-const STRIPE_KYC_VALIDATOR = "0x12b456dcc0e669eeb1d96806c8ef87b713d39cc8" as Hex;
-const PLAID_CREDIT_VALIDATOR = "0x9a0ed706f1714961bf607404521a58decddc2636" as Hex;
+const STRIPE_KYC_VALIDATOR = "0xebba79075ad00a22c5ff9a1f36a379f577265936" as Hex;
+const PLAID_CREDIT_VALIDATOR = "0x07e8653b55a3cd703106c9726a140755204c1ad5" as Hex;
 
 const registeredAbi = parseAbi([
   "event Registered(uint256 indexed agentId, string agentURI, address indexed owner)",

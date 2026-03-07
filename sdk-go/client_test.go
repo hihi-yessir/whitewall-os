@@ -55,7 +55,6 @@ func TestConnect_DiscoveredAddressesMatchDeployed(t *testing.T) {
 	a := connectOrSkip(t)
 	cfg := a.GetPolicyConfig()
 
-	// IdentityRegistry should be a non-zero address read from TieredPolicy
 	if cfg.IdentityRegistry == ZeroAddress {
 		t.Error("IdentityRegistry should be non-zero")
 	}
@@ -182,6 +181,161 @@ func TestGetCreditScore_ExistingAgent(t *testing.T) {
 		t.Fatalf("GetCreditScore error: %v", err)
 	}
 	t.Logf("Agent #1 credit score: %d", score)
+}
+
+// ─── BalanceOf ───
+
+func TestBalanceOf_KnownOwner(t *testing.T) {
+	a := connectOrSkip(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	owner, err := a.GetOwner(ctx, existingAgent)
+	if err != nil {
+		t.Fatalf("GetOwner error: %v", err)
+	}
+	balance, err := a.BalanceOf(ctx, owner)
+	if err != nil {
+		t.Fatalf("BalanceOf error: %v", err)
+	}
+	if balance.Cmp(big.NewInt(0)) <= 0 {
+		t.Error("balance should be > 0 for known owner")
+	}
+	t.Logf("Owner %s has %d agents", owner.Hex(), balance.Int64())
+}
+
+// ─── KYC Data ───
+
+func TestGetKYCData_ExistingAgent(t *testing.T) {
+	a := connectOrSkip(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	data, err := a.GetKYCData(ctx, existingAgent)
+	if err != nil {
+		t.Fatalf("GetKYCData error: %v", err)
+	}
+	t.Logf("Agent #1 KYC data: verified=%v verifiedAt=%s sessionHash=%x",
+		data.Verified, data.VerifiedAt.String(), data.SessionHash)
+}
+
+// ─── Credit Data ───
+
+func TestHasCreditScore_ExistingAgent(t *testing.T) {
+	a := connectOrSkip(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	has, err := a.HasCreditScore(ctx, existingAgent)
+	if err != nil {
+		t.Fatalf("HasCreditScore error: %v", err)
+	}
+	t.Logf("Agent #1 has credit score: %v", has)
+}
+
+func TestGetCreditData_ExistingAgent(t *testing.T) {
+	a := connectOrSkip(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	data, err := a.GetCreditData(ctx, existingAgent)
+	if err != nil {
+		t.Fatalf("GetCreditData error: %v", err)
+	}
+	t.Logf("Agent #1 credit data: score=%d hasScore=%v verifiedAt=%s dataHash=%x",
+		data.Score, data.HasScore, data.VerifiedAt.String(), data.DataHash)
+}
+
+// ─── TEE / SGX ───
+
+func TestGetSgxConfig(t *testing.T) {
+	a := connectOrSkip(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	config, err := a.GetSgxConfig(ctx)
+	if err != nil {
+		t.Fatalf("GetSgxConfig error: %v", err)
+	}
+	t.Logf("SGX config: verifier=%s mrEnclave=%x", config.Verifier.Hex(), config.MrEnclave)
+}
+
+func TestIsTeeEnabled(t *testing.T) {
+	a := connectOrSkip(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	enabled, err := a.IsTeeEnabled(ctx)
+	if err != nil {
+		t.Fatalf("IsTeeEnabled error: %v", err)
+	}
+	t.Logf("TEE enabled: %v", enabled)
+}
+
+// ─── ValidationRegistry ───
+
+func TestGetValidationSummary_ExistingAgent(t *testing.T) {
+	a := connectOrSkip(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	summary, err := a.GetValidationSummary(ctx, existingAgent, nil, "")
+	if err != nil {
+		t.Fatalf("GetValidationSummary error: %v", err)
+	}
+	t.Logf("Agent #1 validation summary: count=%d avgScore=%d", summary.Count, summary.AvgScore)
+}
+
+func TestGetAgentValidations_ExistingAgent(t *testing.T) {
+	a := connectOrSkip(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	hashes, err := a.GetAgentValidations(ctx, existingAgent)
+	if err != nil {
+		t.Fatalf("GetAgentValidations error: %v", err)
+	}
+	t.Logf("Agent #1 has %d validations", len(hashes))
+	for i, h := range hashes {
+		t.Logf("  validation[%d]: %x", i, h)
+	}
+}
+
+func TestGetValidationStatus_FirstHash(t *testing.T) {
+	a := connectOrSkip(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	hashes, err := a.GetAgentValidations(ctx, existingAgent)
+	if err != nil {
+		t.Fatalf("GetAgentValidations error: %v", err)
+	}
+	if len(hashes) == 0 {
+		t.Skip("no validations to check")
+	}
+	status, err := a.GetValidationStatus(ctx, hashes[0])
+	if err != nil {
+		t.Fatalf("GetValidationStatus error: %v", err)
+	}
+	if status.AgentId.Cmp(existingAgent) != 0 {
+		t.Errorf("agentId = %s, want 1", status.AgentId.String())
+	}
+	t.Logf("Validation status: validator=%s response=%d tag=%s",
+		status.ValidatorAddress.Hex(), status.Response, status.Tag)
+}
+
+func TestGetValidatorRequests(t *testing.T) {
+	a := connectOrSkip(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	// Use the WorldIDValidator as a validator address for testing
+	cfg := a.GetPolicyConfig()
+	hashes, err := a.GetValidatorRequests(ctx, cfg.WorldIDValidator)
+	if err != nil {
+		t.Fatalf("GetValidatorRequests error: %v", err)
+	}
+	t.Logf("WorldIDValidator has %d requests", len(hashes))
 }
 
 // ─── GetAgentStatus (basic composite) ───

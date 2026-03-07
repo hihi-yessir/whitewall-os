@@ -28,6 +28,37 @@ type ValidationSummary struct {
 	AvgScore uint8
 }
 
+// ValidationStatus holds the result of a getValidationStatus call.
+type ValidationStatus struct {
+	ValidatorAddress common.Address
+	AgentId          *big.Int
+	Response         uint8
+	ResponseHash     [32]byte
+	Tag              string
+	LastUpdate       *big.Int
+}
+
+// KYCData holds the result of a getKYCData call.
+type KYCData struct {
+	Verified   bool
+	SessionHash [32]byte
+	VerifiedAt *big.Int
+}
+
+// CreditData holds the result of a getCreditData call.
+type CreditData struct {
+	Score      uint8
+	DataHash   [32]byte
+	VerifiedAt *big.Int
+	HasScore   bool
+}
+
+// SgxConfig holds the result of a getSgxConfig call.
+type SgxConfig struct {
+	Verifier  common.Address
+	MrEnclave [32]byte
+}
+
 // ZeroAddress is the Ethereum zero address.
 var ZeroAddress = common.Address{}
 

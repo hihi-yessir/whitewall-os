@@ -1,6 +1,19 @@
 export { WhitewallOS } from "./client.js";
 export type { WhitewallOSConfig } from "./client.js";
-export type { AgentStatus, FullAgentStatus, AccessGrantedEvent } from "./types.js";
+export type {
+  AgentStatus,
+  FullAgentStatus,
+  AccessGrantedEvent,
+  AccessDeniedEvent,
+  ValidationSummary,
+  ValidationStatus,
+  ValidationRequestEvent,
+  ValidationResponseEvent,
+  KYCData,
+  CreditData,
+  SgxConfig,
+  CreditScoreSetEvent,
+} from "./types.js";
 export type { ChainName, WhitewallOSAddresses, PolicyConfig } from "./addresses.js";
 export { addresses } from "./addresses.js";
 export {

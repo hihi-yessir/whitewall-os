@@ -12,13 +12,27 @@ import { baseSepolia } from "viem/chains";
 import {
   tieredPolicyAbi,
   identityRegistryAbi,
+  validationRegistryAbi,
   worldIdValidatorAbi,
   whitewallConsumerAbi,
   stripeKYCValidatorAbi,
   plaidCreditValidatorAbi,
 } from "./abis.js";
 import { addresses, type ChainName, type WhitewallOSAddresses, type PolicyConfig } from "./addresses.js";
-import type { AgentStatus, FullAgentStatus, AccessGrantedEvent } from "./types.js";
+import type {
+  AgentStatus,
+  FullAgentStatus,
+  AccessGrantedEvent,
+  AccessDeniedEvent,
+  ValidationSummary,
+  ValidationStatus,
+  ValidationRequestEvent,
+  ValidationResponseEvent,
+  KYCData,
+  CreditData,
+  SgxConfig,
+  CreditScoreSetEvent,
+} from "./types.js";
 
 const chainMap: Record<ChainName, Chain> = {
   baseSepolia,
@@ -165,6 +179,15 @@ export class WhitewallOS {
     });
   }
 
+  async balanceOf(owner: Address): Promise<bigint> {
+    return this.client.readContract({
+      address: this.policyConfig.identityRegistry,
+      abi: identityRegistryAbi,
+      functionName: "balanceOf",
+      args: [owner],
+    });
+  }
+
   // ─── KYC & Credit Read Methods ───
 
   async isKYCVerified(agentId: bigint): Promise<boolean> {
@@ -182,6 +205,25 @@ export class WhitewallOS {
     }
   }
 
+  async getKYCData(agentId: bigint): Promise<KYCData> {
+    const addr = this.policyConfig.stripeKYCValidator ?? this.addrs.stripeKYCValidator;
+    try {
+      const [verified, sessionHash, verifiedAt] = await this.client.readContract({
+        address: addr,
+        abi: stripeKYCValidatorAbi,
+        functionName: "getKYCData",
+        args: [agentId],
+      });
+      return { verified, sessionHash, verifiedAt };
+    } catch {
+      return {
+        verified: false,
+        sessionHash: "0x0000000000000000000000000000000000000000000000000000000000000000",
+        verifiedAt: 0n,
+      };
+    }
+  }
+
   async getCreditScore(agentId: bigint): Promise<number> {
     const addr = this.policyConfig.plaidCreditValidator ?? this.addrs.plaidCreditValidator;
     if (!addr) return 0;
@@ -195,6 +237,99 @@ export class WhitewallOS {
     } catch {
       return 0;
     }
+  }
+
+  async hasCreditScore(agentId: bigint): Promise<boolean> {
+    const addr = this.policyConfig.plaidCreditValidator ?? this.addrs.plaidCreditValidator;
+    if (!addr) return false;
+    try {
+      return await this.client.readContract({
+        address: addr,
+        abi: plaidCreditValidatorAbi,
+        functionName: "hasCreditScore",
+        args: [agentId],
+      });
+    } catch {
+      return false;
+    }
+  }
+
+  async getCreditData(agentId: bigint): Promise<CreditData> {
+    const addr = this.policyConfig.plaidCreditValidator ?? this.addrs.plaidCreditValidator;
+    try {
+      const [score, dataHash, verifiedAt, hasScore] = await this.client.readContract({
+        address: addr,
+        abi: plaidCreditValidatorAbi,
+        functionName: "getCreditData",
+        args: [agentId],
+      });
+      return { score, dataHash, verifiedAt, hasScore };
+    } catch {
+      return {
+        score: 0,
+        dataHash: "0x0000000000000000000000000000000000000000000000000000000000000000",
+        verifiedAt: 0n,
+        hasScore: false,
+      };
+    }
+  }
+
+  // ─── TEE / SGX ───
+
+  async getSgxConfig(): Promise<SgxConfig> {
+    const addr = this.policyConfig.plaidCreditValidator ?? this.addrs.plaidCreditValidator;
+    const [verifier, mrEnclave] = await this.client.readContract({
+      address: addr,
+      abi: plaidCreditValidatorAbi,
+      functionName: "getSgxConfig",
+    });
+    return { verifier, mrEnclave };
+  }
+
+  async isTeeEnabled(): Promise<boolean> {
+    const config = await this.getSgxConfig();
+    return config.verifier !== zeroAddress;
+  }
+
+  // ─── ValidationRegistry ───
+
+  async getValidationSummary(agentId: bigint, validators: Address[] = [], tag = ""): Promise<ValidationSummary> {
+    const [count, avgResponse] = await this.client.readContract({
+      address: this.addrs.validationRegistry,
+      abi: validationRegistryAbi,
+      functionName: "getSummary",
+      args: [agentId, validators, tag],
+    });
+    return { count, avgResponse };
+  }
+
+  async getAgentValidations(agentId: bigint): Promise<readonly `0x${string}`[]> {
+    return this.client.readContract({
+      address: this.addrs.validationRegistry,
+      abi: validationRegistryAbi,
+      functionName: "getAgentValidations",
+      args: [agentId],
+    });
+  }
+
+  async getValidationStatus(requestHash: `0x${string}`): Promise<ValidationStatus> {
+    const [validatorAddress, agentId, response, responseHash, tag, lastUpdate] =
+      await this.client.readContract({
+        address: this.addrs.validationRegistry,
+        abi: validationRegistryAbi,
+        functionName: "getValidationStatus",
+        args: [requestHash],
+      });
+    return { validatorAddress, agentId, response, responseHash, tag, lastUpdate };
+  }
+
+  async getValidatorRequests(validatorAddress: Address): Promise<readonly `0x${string}`[]> {
+    return this.client.readContract({
+      address: this.addrs.validationRegistry,
+      abi: validationRegistryAbi,
+      functionName: "getValidatorRequests",
+      args: [validatorAddress],
+    });
   }
 
   // ─── Composite: Full Status ───
@@ -286,6 +421,25 @@ export class WhitewallOS {
     });
   }
 
+  onAccessDenied(
+    callback: (event: AccessDeniedEvent) => void,
+  ): WatchEventReturnType {
+    return this.client.watchEvent({
+      address: this.addrs.whitewallConsumer,
+      event: whitewallConsumerAbi[1], // AccessDenied
+      onLogs: (logs) => {
+        for (const log of logs) {
+          callback({
+            agentId: (log as any).args.agentId,
+            reason: (log as any).args.reason,
+            blockNumber: log.blockNumber,
+            transactionHash: log.transactionHash,
+          });
+        }
+      },
+    });
+  }
+
   onRegistered(
     callback: (agentId: bigint, owner: Address) => void,
   ): WatchEventReturnType {
@@ -298,6 +452,72 @@ export class WhitewallOS {
             (log as any).args.agentId,
             (log as any).args.owner,
           );
+        }
+      },
+    });
+  }
+
+  onValidationRequest(
+    callback: (event: ValidationRequestEvent) => void,
+  ): WatchEventReturnType {
+    return this.client.watchEvent({
+      address: this.addrs.validationRegistry,
+      event: validationRegistryAbi[4], // ValidationRequest event
+      onLogs: (logs) => {
+        for (const log of logs) {
+          callback({
+            validatorAddress: (log as any).args.validatorAddress,
+            agentId: (log as any).args.agentId,
+            requestURI: (log as any).args.requestURI,
+            requestHash: (log as any).args.requestHash,
+            blockNumber: log.blockNumber,
+            transactionHash: log.transactionHash,
+          });
+        }
+      },
+    });
+  }
+
+  onValidationResponse(
+    callback: (event: ValidationResponseEvent) => void,
+  ): WatchEventReturnType {
+    return this.client.watchEvent({
+      address: this.addrs.validationRegistry,
+      event: validationRegistryAbi[5], // ValidationResponse event
+      onLogs: (logs) => {
+        for (const log of logs) {
+          callback({
+            validatorAddress: (log as any).args.validatorAddress,
+            agentId: (log as any).args.agentId,
+            requestHash: (log as any).args.requestHash,
+            response: Number((log as any).args.response),
+            responseURI: (log as any).args.responseURI,
+            responseHash: (log as any).args.responseHash,
+            tag: (log as any).args.tag,
+            blockNumber: log.blockNumber,
+            transactionHash: log.transactionHash,
+          });
+        }
+      },
+    });
+  }
+
+  onCreditScoreSet(
+    callback: (event: CreditScoreSetEvent) => void,
+  ): WatchEventReturnType {
+    return this.client.watchEvent({
+      address: this.policyConfig.plaidCreditValidator,
+      event: plaidCreditValidatorAbi[3], // CreditScoreSet event
+      onLogs: (logs) => {
+        for (const log of logs) {
+          callback({
+            agentId: (log as any).args.agentId,
+            score: Number((log as any).args.score),
+            dataHash: (log as any).args.dataHash,
+            timestamp: (log as any).args.timestamp,
+            blockNumber: log.blockNumber,
+            transactionHash: log.transactionHash,
+          });
         }
       },
     });

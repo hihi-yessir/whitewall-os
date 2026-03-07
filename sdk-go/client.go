@@ -145,6 +145,164 @@ func (a *WhitewallOS) GetMetadata(ctx context.Context, agentId *big.Int, key str
 	return a.callBytes(ctx, a.policy.IdentityRegistry, IdentityRegistryABI, "getMetadata", agentId, key)
 }
 
+// BalanceOf returns the number of agents owned by an address.
+func (a *WhitewallOS) BalanceOf(ctx context.Context, owner common.Address) (*big.Int, error) {
+	return a.callBigInt(ctx, a.policy.IdentityRegistry, IdentityRegistryABI, "balanceOf", owner)
+}
+
+// ─── KYC & Credit Data ───
+
+// GetKYCData returns structured KYC verification data for an agent.
+func (a *WhitewallOS) GetKYCData(ctx context.Context, agentId *big.Int) (*KYCData, error) {
+	if a.policy.StripeKYCValidator == ZeroAddress {
+		return &KYCData{}, nil
+	}
+	result, err := a.callRaw(ctx, a.policy.StripeKYCValidator, StripeKYCValidatorABI, "getKYCData", agentId)
+	if err != nil {
+		return &KYCData{}, nil
+	}
+	unpacked, err := StripeKYCValidatorABI.Unpack("getKYCData", result)
+	if err != nil {
+		return &KYCData{}, nil
+	}
+	return &KYCData{
+		Verified:    unpacked[0].(bool),
+		SessionHash: unpacked[1].([32]byte),
+		VerifiedAt:  unpacked[2].(*big.Int),
+	}, nil
+}
+
+// HasCreditScore checks if an agent has a credit score set.
+func (a *WhitewallOS) HasCreditScore(ctx context.Context, agentId *big.Int) (bool, error) {
+	if a.policy.PlaidCreditValidator == ZeroAddress {
+		return false, nil
+	}
+	has, err := a.callBool(ctx, a.policy.PlaidCreditValidator, PlaidCreditValidatorABI, "hasCreditScore", agentId)
+	if err != nil {
+		return false, nil
+	}
+	return has, nil
+}
+
+// GetCreditData returns structured credit data for an agent.
+func (a *WhitewallOS) GetCreditData(ctx context.Context, agentId *big.Int) (*CreditData, error) {
+	if a.policy.PlaidCreditValidator == ZeroAddress {
+		return &CreditData{}, nil
+	}
+	result, err := a.callRaw(ctx, a.policy.PlaidCreditValidator, PlaidCreditValidatorABI, "getCreditData", agentId)
+	if err != nil {
+		return &CreditData{}, nil
+	}
+	unpacked, err := PlaidCreditValidatorABI.Unpack("getCreditData", result)
+	if err != nil {
+		return &CreditData{}, nil
+	}
+	return &CreditData{
+		Score:      unpacked[0].(uint8),
+		DataHash:   unpacked[1].([32]byte),
+		VerifiedAt: unpacked[2].(*big.Int),
+		HasScore:   unpacked[3].(bool),
+	}, nil
+}
+
+// ─── TEE / SGX ───
+
+// GetSgxConfig returns the SGX DCAP configuration from PlaidCreditValidator.
+func (a *WhitewallOS) GetSgxConfig(ctx context.Context) (*SgxConfig, error) {
+	addr := a.policy.PlaidCreditValidator
+	if addr == ZeroAddress {
+		return &SgxConfig{}, nil
+	}
+	result, err := a.callRaw(ctx, addr, PlaidCreditValidatorABI, "getSgxConfig")
+	if err != nil {
+		return &SgxConfig{}, nil
+	}
+	unpacked, err := PlaidCreditValidatorABI.Unpack("getSgxConfig", result)
+	if err != nil {
+		return &SgxConfig{}, nil
+	}
+	return &SgxConfig{
+		Verifier:  unpacked[0].(common.Address),
+		MrEnclave: unpacked[1].([32]byte),
+	}, nil
+}
+
+// IsTeeEnabled checks if TEE verification is enabled (SGX verifier is non-zero).
+func (a *WhitewallOS) IsTeeEnabled(ctx context.Context) (bool, error) {
+	config, err := a.GetSgxConfig(ctx)
+	if err != nil {
+		return false, err
+	}
+	return config.Verifier != ZeroAddress, nil
+}
+
+// ─── ValidationRegistry ───
+
+// GetValidationSummary returns the validation count and average response for an agent.
+func (a *WhitewallOS) GetValidationSummary(ctx context.Context, agentId *big.Int, validators []common.Address, tag string) (*ValidationSummary, error) {
+	if validators == nil {
+		validators = []common.Address{}
+	}
+	result, err := a.callRaw(ctx, a.addrs.ValidationRegistry, ValidationRegistryABI, "getSummary", agentId, validators, tag)
+	if err != nil {
+		return nil, err
+	}
+	unpacked, err := ValidationRegistryABI.Unpack("getSummary", result)
+	if err != nil {
+		return nil, fmt.Errorf("unpack getSummary: %w", err)
+	}
+	return &ValidationSummary{
+		Count:    unpacked[0].(uint64),
+		AvgScore: unpacked[1].(uint8),
+	}, nil
+}
+
+// GetAgentValidations returns all validation request hashes for an agent.
+func (a *WhitewallOS) GetAgentValidations(ctx context.Context, agentId *big.Int) ([][32]byte, error) {
+	result, err := a.callRaw(ctx, a.addrs.ValidationRegistry, ValidationRegistryABI, "getAgentValidations", agentId)
+	if err != nil {
+		return nil, err
+	}
+	unpacked, err := ValidationRegistryABI.Unpack("getAgentValidations", result)
+	if err != nil {
+		return nil, fmt.Errorf("unpack getAgentValidations: %w", err)
+	}
+	return unpacked[0].([][32]byte), nil
+}
+
+// GetValidationStatus returns the status of a specific validation request.
+func (a *WhitewallOS) GetValidationStatus(ctx context.Context, requestHash [32]byte) (*ValidationStatus, error) {
+	result, err := a.callRaw(ctx, a.addrs.ValidationRegistry, ValidationRegistryABI, "getValidationStatus", requestHash)
+	if err != nil {
+		return nil, err
+	}
+	unpacked, err := ValidationRegistryABI.Unpack("getValidationStatus", result)
+	if err != nil {
+		return nil, fmt.Errorf("unpack getValidationStatus: %w", err)
+	}
+	return &ValidationStatus{
+		ValidatorAddress: unpacked[0].(common.Address),
+		AgentId:          unpacked[1].(*big.Int),
+		Response:         unpacked[2].(uint8),
+		ResponseHash:     unpacked[3].([32]byte),
+		Tag:              unpacked[4].(string),
+		LastUpdate:       unpacked[5].(*big.Int),
+	}, nil
+}
+
+// GetValidatorRequests returns all request hashes for a given validator.
+func (a *WhitewallOS) GetValidatorRequests(ctx context.Context, validatorAddress common.Address) ([][32]byte, error) {
+	result, err := a.callRaw(ctx, a.addrs.ValidationRegistry, ValidationRegistryABI, "getValidatorRequests", validatorAddress)
+	if err != nil {
+		return nil, err
+	}
+	unpacked, err := ValidationRegistryABI.Unpack("getValidatorRequests", result)
+	if err != nil {
+		return nil, fmt.Errorf("unpack getValidatorRequests: %w", err)
+	}
+	return unpacked[0].([][32]byte), nil
+}
+
 // ─── Composite ───
 
 // GetAgentStatus returns the basic verification status of an agent.
@@ -302,6 +460,21 @@ func (a *WhitewallOS) callUint8(ctx context.Context, to common.Address, abiDef i
 		return 0, fmt.Errorf("unpack %s: %w", method, err)
 	}
 	return unpacked[0].(uint8), nil
+}
+
+func (a *WhitewallOS) callBigInt(ctx context.Context, to common.Address, abiDef interface {
+	Pack(string, ...interface{}) ([]byte, error)
+	Unpack(string, []byte) ([]interface{}, error)
+}, method string, args ...interface{}) (*big.Int, error) {
+	result, err := a.callRaw(ctx, to, abiDef, method, args...)
+	if err != nil {
+		return nil, err
+	}
+	unpacked, err := abiDef.Unpack(method, result)
+	if err != nil {
+		return nil, fmt.Errorf("unpack %s: %w", method, err)
+	}
+	return unpacked[0].(*big.Int), nil
 }
 
 func (a *WhitewallOS) callString(ctx context.Context, to common.Address, abiDef interface {

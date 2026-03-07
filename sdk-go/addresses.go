@@ -18,6 +18,8 @@ type Addresses struct {
 	WhitewallConsumer    common.Address
 	StripeKYCValidator   common.Address
 	PlaidCreditValidator common.Address
+	ValidationRegistry   common.Address
+	ReputationRegistry   common.Address
 }
 
 // PolicyConfig holds the protocol configuration read from the
@@ -44,5 +46,7 @@ var ChainAddresses = map[ChainName]Addresses{
 		WhitewallConsumer:    common.HexToAddress("0x9670cc85a97c07a1bb6353fb968c6a2c153db99f"),
 		StripeKYCValidator:   common.HexToAddress("0xebba79075ad00a22c5ff9a1f36a379f577265936"),
 		PlaidCreditValidator: common.HexToAddress("0x07e8653b55a3cd703106c9726a140755204c1ad5"),
+		ValidationRegistry:   common.HexToAddress("0x8004Cb1BF31DAf7788923b405b754f57acEB4272"),
+		ReputationRegistry:   common.HexToAddress("0x8004B663056A597Dffe9eCcC1965A193B7388713"),
 	},
 }

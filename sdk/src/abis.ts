@@ -143,6 +143,13 @@ export const validationRegistryAbi = [
     type: "function",
   },
   {
+    inputs: [{ name: "validatorAddress", type: "address" }],
+    name: "getValidatorRequests",
+    outputs: [{ name: "", type: "bytes32[]" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
     inputs: [{ name: "requestHash", type: "bytes32" }],
     name: "getValidationStatus",
     outputs: [

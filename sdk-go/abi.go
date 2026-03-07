@@ -26,7 +26,9 @@ const identityRegistryABIJSON = `[
 
 const validationRegistryABIJSON = `[
 	{"inputs":[{"name":"agentId","type":"uint256"},{"name":"validatorAddresses","type":"address[]"},{"name":"tag","type":"string"}],"name":"getSummary","outputs":[{"name":"count","type":"uint64"},{"name":"avgResponse","type":"uint8"}],"stateMutability":"view","type":"function"},
-	{"inputs":[{"name":"agentId","type":"uint256"}],"name":"getAgentValidations","outputs":[{"name":"","type":"bytes32[]"}],"stateMutability":"view","type":"function"}
+	{"inputs":[{"name":"agentId","type":"uint256"}],"name":"getAgentValidations","outputs":[{"name":"","type":"bytes32[]"}],"stateMutability":"view","type":"function"},
+	{"inputs":[{"name":"requestHash","type":"bytes32"}],"name":"getValidationStatus","outputs":[{"name":"validatorAddress","type":"address"},{"name":"agentId","type":"uint256"},{"name":"response","type":"uint8"},{"name":"responseHash","type":"bytes32"},{"name":"tag","type":"string"},{"name":"lastUpdate","type":"uint256"}],"stateMutability":"view","type":"function"},
+	{"inputs":[{"name":"validatorAddress","type":"address"}],"name":"getValidatorRequests","outputs":[{"name":"","type":"bytes32[]"}],"stateMutability":"view","type":"function"}
 ]`
 
 const worldIDValidatorABIJSON = `[
@@ -34,19 +36,23 @@ const worldIDValidatorABIJSON = `[
 ]`
 
 const stripeKYCValidatorABIJSON = `[
-	{"inputs":[{"name":"agentId","type":"uint256"}],"name":"isKYCVerified","outputs":[{"name":"","type":"bool"}],"stateMutability":"view","type":"function"}
+	{"inputs":[{"name":"agentId","type":"uint256"}],"name":"isKYCVerified","outputs":[{"name":"","type":"bool"}],"stateMutability":"view","type":"function"},
+	{"inputs":[{"name":"agentId","type":"uint256"}],"name":"getKYCData","outputs":[{"name":"verified","type":"bool"},{"name":"sessionHash","type":"bytes32"},{"name":"verifiedAt","type":"uint256"}],"stateMutability":"view","type":"function"}
 ]`
 
 const plaidCreditValidatorABIJSON = `[
-	{"inputs":[{"name":"agentId","type":"uint256"}],"name":"getCreditScore","outputs":[{"name":"","type":"uint8"}],"stateMutability":"view","type":"function"}
+	{"inputs":[{"name":"agentId","type":"uint256"}],"name":"getCreditScore","outputs":[{"name":"","type":"uint8"}],"stateMutability":"view","type":"function"},
+	{"inputs":[{"name":"agentId","type":"uint256"}],"name":"hasCreditScore","outputs":[{"name":"","type":"bool"}],"stateMutability":"view","type":"function"},
+	{"inputs":[{"name":"agentId","type":"uint256"}],"name":"getCreditData","outputs":[{"name":"score","type":"uint8"},{"name":"dataHash","type":"bytes32"},{"name":"verifiedAt","type":"uint256"},{"name":"hasScore","type":"bool"}],"stateMutability":"view","type":"function"},
+	{"inputs":[],"name":"getSgxConfig","outputs":[{"name":"verifier","type":"address"},{"name":"mrEnclave","type":"bytes32"}],"stateMutability":"view","type":"function"}
 ]`
 
 var (
-	TieredPolicyABI        abi.ABI
-	IdentityRegistryABI    abi.ABI
-	ValidationRegistryABI  abi.ABI
-	WorldIDValidatorABI    abi.ABI
-	StripeKYCValidatorABI  abi.ABI
+	TieredPolicyABI         abi.ABI
+	IdentityRegistryABI     abi.ABI
+	ValidationRegistryABI   abi.ABI
+	WorldIDValidatorABI     abi.ABI
+	StripeKYCValidatorABI   abi.ABI
 	PlaidCreditValidatorABI abi.ABI
 )
 

@@ -1,11 +1,14 @@
 <div align="center">
 
+<img src="assets/banner.svg" alt="Whitewall OS" width="100%" />
+
 # Whitewall OS
 
 **On-chain identity and access control for AI agents.**
 
 [![ERC-8004](https://img.shields.io/badge/ERC--8004-Trustless%20Agents-blue?style=for-the-badge)](https://www.8004.org)
 [![Chainlink CRE](https://img.shields.io/badge/Chainlink-CRE-375BD2?style=for-the-badge&logo=chainlink)](https://docs.chain.link/cre)
+[![World ID](https://img.shields.io/badge/World%20ID-ZK%20Proofs-000000?style=for-the-badge)](https://worldcoin.org/world-id)
 [![Base Sepolia](https://img.shields.io/badge/Base-Sepolia-0052FF?style=for-the-badge&logo=coinbase)](https://sepolia.basescan.org)
 [![npm](https://img.shields.io/npm/v/@whitewall-os/sdk?style=for-the-badge&label=SDK)](https://www.npmjs.com/package/@whitewall-os/sdk)
 
@@ -29,6 +32,7 @@ It layers identity verification (World ID), KYC (Stripe), and credit scoring (Pl
 - [Deployed Contracts (Base Sepolia)](#deployed-contracts-base-sepolia)
 - [SDK](#sdk)
 - [CRE Workflows](#cre-workflows)
+- [Chainlink Products Used](#chainlink-products-used)
 - [Tech Stack](#tech-stack)
 - [Getting Started](#getting-started)
 - [ERC-8004 Protocol](#erc-8004-trustless-agents)
@@ -284,14 +288,27 @@ All three use Chainlink's Confidential HTTP — API keys live in TEE enclaves, n
 
 ---
 
+## Chainlink Products Used
+
+| Product | Where | What it does |
+|:--------|:------|:-------------|
+| **CRE (Chainlink Runtime Environment)** | [whitewall-cre](https://github.com/hihi-yessir/whitewall-cre) | Event-driven workflow engine — runs access, KYC, and credit verification workflows in the DON |
+| **Confidential HTTP** | KYC + Credit workflows | Fetches Stripe Identity and Plaid Balance APIs from inside TEE enclaves — API keys never leave the enclave |
+| **ACE (Access Control Engine)** | [Verified-Agent-Hub](https://github.com/hihi-yessir/Verified-Agent-Hub) contracts | PolicyEngine + TieredPolicy + WhitewallExtractor — evaluates 5-8 on-chain checks before granting access |
+| **DON (Decentralized Oracle Network)** | CRE workflow execution | Signs and delivers reports to on-chain consumer contracts via KeystoneForwarder |
+| **DON Vault (Secrets)** | CRE secrets management | Stores Stripe API keys, Plaid credentials, and JWT signing keys — accessible only inside TEE enclaves |
+
+---
+
 ## Tech Stack
 
 | Layer | Technology |
 |:------|:-----------|
 | Smart Contracts | Solidity 0.8.26, Hardhat, UUPS Proxies |
 | Access Control | Chainlink ACE (PolicyEngine, Extractor, Policy) |
+| Workflow Engine | Chainlink CRE + DON |
+| Confidential Data | Chainlink Confidential HTTP + DON Vault |
 | TEE Attestation | Intel SGX DCAP via Automata verifyAndAttestOnChain |
-| Oracle | Chainlink CRE + Confidential HTTP |
 | Identity | World ID (on-chain ZK proofs) |
 | KYC | Stripe Identity API |
 | Credit | Plaid Balance API |

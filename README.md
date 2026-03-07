@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="assets/banner.svg" alt="Whitewall OS" width="100%" />
+
 # Whitewall OS
 
 **On-chain identity and access control for AI agents.**

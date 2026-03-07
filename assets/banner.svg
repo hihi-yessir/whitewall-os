@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 400">
+  <defs>
+    <linearGradient id="meshGlow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0A0A0A"/>
+      <stop offset="40%" stop-color="#0D1020"/>
+      <stop offset="100%" stop-color="#0A0A0A"/>
+    </linearGradient>
+    <linearGradient id="blueGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#375BD2" stop-opacity="0"/>
+      <stop offset="50%" stop-color="#375BD2" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#375BD2" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="fadeLeft" x1="0%" y1="0%" x2="30%" y2="0%">
+      <stop offset="0%" stop-color="#0A0A0A"/>
+      <stop offset="100%" stop-color="#0A0A0A" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="fadeRight" x1="70%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0A0A0A" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#0A0A0A"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="400" fill="url(#meshGlow)"/>
+
+  <!-- Mesh grid lines (right side) -->
+  <g opacity="0.08" stroke="#EEEEEE" stroke-width="1" fill="none">
+    <line x1="600" y1="0" x2="600" y2="400"/>
+    <line x1="700" y1="0" x2="700" y2="400"/>
+    <line x1="800" y1="0" x2="800" y2="400"/>
+    <line x1="900" y1="0" x2="900" y2="400"/>
+    <line x1="1000" y1="0" x2="1000" y2="400"/>
+    <line x1="1100" y1="0" x2="1100" y2="400"/>
+    <line x1="500" y1="50" x2="1200" y2="50"/>
+    <line x1="500" y1="120" x2="1200" y2="120"/>
+    <line x1="500" y1="200" x2="1200" y2="200"/>
+    <line x1="500" y1="280" x2="1200" y2="280"/>
+    <line x1="500" y1="350" x2="1200" y2="350"/>
+  </g>
+
+  <!-- Blue glow lines (verification gates) -->
+  <g opacity="0.15" stroke="#375BD2" stroke-width="2" fill="none">
+    <line x1="750" y1="30" x2="750" y2="370"/>
+    <line x1="850" y1="30" x2="850" y2="370"/>
+    <line x1="950" y1="30" x2="950" y2="370"/>
+    <line x1="1050" y1="30" x2="1050" y2="370"/>
+  </g>
+
+  <!-- Agent particles (dots traveling through gates) -->
+  <circle cx="720" cy="160" r="3" fill="#375BD2" opacity="0.8"/>
+  <circle cx="820" cy="220" r="3" fill="#375BD2" opacity="0.6"/>
+  <circle cx="920" cy="140" r="3" fill="#2EAD6B" opacity="0.8"/>
+  <circle cx="1020" cy="260" r="3" fill="#2EAD6B" opacity="0.6"/>
+  <circle cx="1100" cy="180" r="3" fill="#2EAD6B" opacity="0.9"/>
+  <circle cx="780" cy="300" r="3" fill="#D94040" opacity="0.5"/>
+  <circle cx="680" cy="100" r="3" fill="#375BD2" opacity="0.4"/>
+
+  <!-- Particle trails -->
+  <line x1="700" y1="160" x2="720" y2="160" stroke="#375BD2" stroke-width="1.5" opacity="0.4"/>
+  <line x1="790" y1="220" x2="820" y2="220" stroke="#375BD2" stroke-width="1.5" opacity="0.3"/>
+  <line x1="880" y1="140" x2="920" y2="140" stroke="#2EAD6B" stroke-width="1.5" opacity="0.4"/>
+  <line x1="980" y1="260" x2="1020" y2="260" stroke="#2EAD6B" stroke-width="1.5" opacity="0.3"/>
+  <line x1="1060" y1="180" x2="1100" y2="180" stroke="#2EAD6B" stroke-width="1.5" opacity="0.5"/>
+
+  <!-- Fade overlays -->
+  <rect width="1200" height="400" fill="url(#fadeLeft)"/>
+  <rect width="1200" height="400" fill="url(#fadeRight)"/>
+
+  <!-- Logo: three bars -->
+  <rect x="80" y="148" width="5" height="28" rx="1" fill="#EEEEEE" opacity="0.3"/>
+  <rect x="90" y="148" width="5" height="28" rx="1" fill="#EEEEEE" opacity="0.6"/>
+  <rect x="100" y="148" width="5" height="28" rx="1" fill="#EEEEEE" opacity="0.9"/>
+
+  <!-- Title -->
+  <text x="118" y="172" font-family="Inter, system-ui, sans-serif" font-size="28" font-weight="900" letter-spacing="2" fill="#EEEEEE">WHITEWALL OS</text>
+
+  <!-- Tagline -->
+  <text x="82" y="215" font-family="Inter, system-ui, sans-serif" font-size="15" font-weight="400" fill="#EEEEEE" opacity="0.5">On-chain identity and access control for AI agents</text>
+
+  <!-- Tier badges -->
+  <g transform="translate(82, 250)">
+    <rect width="70" height="24" rx="4" fill="none" stroke="#375BD2" stroke-width="1" opacity="0.5"/>
+    <text x="35" y="16" font-family="Inter, system-ui, sans-serif" font-size="10" font-weight="700" fill="#375BD2" text-anchor="middle" letter-spacing="1">ERC-8004</text>
+  </g>
+  <g transform="translate(162, 250)">
+    <rect width="50" height="24" rx="4" fill="none" stroke="#375BD2" stroke-width="1" opacity="0.5"/>
+    <text x="25" y="16" font-family="Inter, system-ui, sans-serif" font-size="10" font-weight="700" fill="#375BD2" text-anchor="middle" letter-spacing="1">ACE</text>
+  </g>
+  <g transform="translate(222, 250)">
+    <rect width="50" height="24" rx="4" fill="none" stroke="#375BD2" stroke-width="1" opacity="0.5"/>
+    <text x="25" y="16" font-family="Inter, system-ui, sans-serif" font-size="10" font-weight="700" fill="#375BD2" text-anchor="middle" letter-spacing="1">CRE</text>
+  </g>
+  <g transform="translate(282, 250)">
+    <rect width="50" height="24" rx="4" fill="none" stroke="#375BD2" stroke-width="1" opacity="0.5"/>
+    <text x="25" y="16" font-family="Inter, system-ui, sans-serif" font-size="10" font-weight="700" fill="#375BD2" text-anchor="middle" letter-spacing="1">TEE</text>
+  </g>
+</svg>

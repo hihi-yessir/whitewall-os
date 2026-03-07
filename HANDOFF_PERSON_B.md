@@ -24,7 +24,7 @@
 |----------|------|------|
 | IdentityRegistry | `0x8004A818BFB912233c491871b3d84c89A494BD9e` | ERC-721 에이전트 등록 |
 | ValidationRegistry | `0x8004Cb1BF31DAf7788923b405b754f57acEB4272` | 검증 기록 (HUMAN_VERIFIED 등) |
-| WorldIDValidator | `0x1258f013d1ba690dc73ea89fd48f86e86ad0f124` | World ID ZK 증명 검증자 |
+| WorldIDValidator | `0xcadd809084debc999ce93384806da8ea90318e11` | World ID ZK 증명 검증자 |
 
 ### ACE 스택 (접근 제어)
 | 컨트랙트 | 주소 | 용도 |
@@ -56,7 +56,7 @@ ValidationRegistry 주소: 0x8004Cb1BF31DAf7788923b405b754f57acEB4272
 1. 유저가 World ID 증명을 제출
        ↓
 2. ValidationRegistry.validationRequest(worldIdValidator, agentId, requestURI)
-   - worldIdValidator = 0x1258f013d1ba690dc73ea89fd48f86e86ad0f124
+   - worldIdValidator = 0xcadd809084debc999ce93384806da8ea90318e11
    - agentId = 에이전트의 NFT 토큰 ID
        ↓ (ValidationRequested 이벤트 발생)
 3. CRE Bonding Workflow가 이벤트 감지
@@ -76,7 +76,7 @@ ValidationRegistry 주소: 0x8004Cb1BF31DAf7788923b405b754f57acEB4272
 ```solidity
 // 1단계: 검증 요청 (프론트엔드 또는 CRE가 호출)
 function validationRequest(
-    address validatorAddress,  // 0x1258f013d1ba690dc73ea89fd48f86e86ad0f124
+    address validatorAddress,  // 0xcadd809084debc999ce93384806da8ea90318e11
     uint256 agentId,           // 에이전트 NFT ID
     string calldata requestURI // 증명 데이터 URI
 ) external returns (bytes32 requestHash);

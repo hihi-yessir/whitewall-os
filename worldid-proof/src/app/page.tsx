@@ -22,7 +22,7 @@ import { baseSepolia } from "viem/chains";
 // ============ Configuration ============
 // Move these to .env.local for production
 const IDENTITY_REGISTRY = "0x8004A818BFB912233c491871b3d84c89A494BD9e" as Address;
-const WORLD_ID_VALIDATOR = "0x1258f013d1ba690dc73ea89fd48f86e86ad0f124" as Address;
+const WORLD_ID_VALIDATOR = "0xcadd809084debc999ce93384806da8ea90318e11" as Address;
 const WORLD_ID_APP_ID = "app_staging_dae27f9b14a30e0e0917797aceac795a";
 const WORLD_ID_ACTION = "verify-owner";
 

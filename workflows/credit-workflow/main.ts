@@ -43,6 +43,7 @@ const configSchema = z.object({
   plaidCreditValidatorAddress: z.string(),
   chainSelectorName: z.string(),
   gasLimit: z.string(),
+  teeServiceUrl: z.string(),
 });
 
 type Config = z.infer<typeof configSchema>;
@@ -130,22 +131,30 @@ const onLogTrigger = (runtime: Runtime<Config>, log: EVMLog): string => {
   runtime.log(`Plaid request for agentId=${agentId}`);
 
   // ========================================
-  // CONFIDENTIAL HTTP: Plaid Balance API
+  // CONFIDENTIAL HTTP: SGX TEE Service
+  // - Calls an SGX enclave service that fetches Plaid data, computes score,
+  //   and generates a DCAP quote binding the result
   // - API keys injected from DON vault (TEE enclave — never exposed to individual nodes)
   // - Response AES-GCM encrypted in transit through DON network
   // ========================================
   const confidentialHttpClient = new cre.capabilities.ConfidentialHTTPClient();
 
-  const plaidResp = confidentialHttpClient.sendRequest(runtime, {
+  const teeResp = confidentialHttpClient.sendRequest(runtime, {
     vaultDonSecrets: [
       { key: "PLAID_CLIENT_ID", namespace: "" },
       { key: "PLAID_SECRET", namespace: "" },
       { key: "PLAID_ACCESS_TOKEN", namespace: "" },
     ],
     request: {
-      url: "https://sandbox.plaid.com/accounts/balance/get",
+      url: runtime.config.teeServiceUrl,
       method: "POST",
-      bodyString: '{"client_id":"{{.PLAID_CLIENT_ID}}","secret":"{{.PLAID_SECRET}}","access_token":"{{.PLAID_ACCESS_TOKEN}}"}',
+      bodyString: JSON.stringify({
+        clientId: "{{.PLAID_CLIENT_ID}}",
+        secret: "{{.PLAID_SECRET}}",
+        publicToken: "{{.PLAID_ACCESS_TOKEN}}",
+        agentId: agentId.toString(),
+        requestHash: requestHash,
+      }),
       multiHeaders: {
         "Content-Type": { values: ["application/json"] },
       },
@@ -153,24 +162,34 @@ const onLogTrigger = (runtime: Runtime<Config>, log: EVMLog): string => {
     },
   }).result();
 
-  const responseBody = new TextDecoder().decode(plaidResp.body);
-  const plaidParsed = JSON.parse(responseBody);
-  const accounts = plaidParsed.accounts as any[];
+  const responseBody = new TextDecoder().decode(teeResp.body);
+  const teeResult = JSON.parse(responseBody) as {
+    score: number;
+    success: boolean;
+    quote: string;
+    error?: string;
+  };
 
-  runtime.log(`Plaid returned ${accounts.length} accounts`);
+  if (!teeResult.success) {
+    throw new Error(`TEE service error: ${teeResult.error}`);
+  }
 
-  const score = computeCreditScore(accounts);
-  runtime.log(`Computed credit score: ${score}/100`);
+  const score = teeResult.score;
+  const sgxQuoteHex = teeResult.quote;
+  runtime.log(`TEE computed credit score: ${score}/100, quote length: ${sgxQuoteHex.length / 2} bytes`);
 
-  // Data hash for on-chain traceability (hash of real Plaid response)
+  // Data hash for on-chain traceability (hash of TEE response)
   const dataHash = keccak256(toHex(responseBody));
 
-  // Encode report: abi.encode(uint256 agentId, uint8 score, bytes32 requestHash, bytes32 dataHash)
+  // Convert SGX quote hex to bytes
+  const sgxQuoteBytes = (sgxQuoteHex.startsWith("0x") ? sgxQuoteHex : `0x${sgxQuoteHex}`) as `0x${string}`;
+
+  // Encode V2 report: abi.encode(uint256 agentId, uint8 score, bytes32 requestHash, bytes32 dataHash, bytes sgxQuote)
   const reportData = encodeAbiParameters(
     parseAbiParameters(
-      "uint256 agentId, uint8 score, bytes32 requestHash, bytes32 dataHash"
+      "uint256 agentId, uint8 score, bytes32 requestHash, bytes32 dataHash, bytes sgxQuote"
     ),
-    [agentId, score, requestHash, dataHash]
+    [agentId, score, requestHash, dataHash, sgxQuoteBytes]
   );
 
   runtime.log(`Report data encoded: ${reportData.slice(0, 66)}...`);

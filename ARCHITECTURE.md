@@ -255,7 +255,7 @@ onReport selector: `0x805f2132` = `bytes4(keccak256("onReport(bytes,bytes)"))`
 |----------|---------|
 | IdentityRegistry | `0x8004A818BFB912233c491871b3d84c89A494BD9e` |
 | ValidationRegistry | `0x8004Cb1BF31DAf7788923b405b754f57acEB4272` |
-| WorldIDValidator | `0x1258f013d1ba690dc73ea89fd48f86e86ad0f124` |
+| WorldIDValidator | `0xcadd809084debc999ce93384806da8ea90318e11` |
 
 ### ACE Stack (Phase 1b)
 | Contract | Address |

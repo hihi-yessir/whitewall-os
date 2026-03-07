@@ -8,6 +8,7 @@ import {
   toHex,
   type Hex,
   getAddress,
+  encodePacked,
 } from "viem";
 
 /**
@@ -466,6 +467,157 @@ describe("KYC + Credit Verification Stack", async function () {
       ]),
       /PlaidCreditValidator: credit score too low/,
     );
+  });
+
+  // ════════════════════════════════════════════
+  // PlaidCreditValidator V2 — SGX DCAP Tests
+  // ════════════════════════════════════════════
+
+  it("CreditValidator V2: onReport with valid SGX quote → score stored", async () => {
+    // Deploy MockSgxDcapVerifier
+    const mockSgxVerifier = await viem.deployContract("MockSgxDcapVerifier");
+    const expectedMrEnclave = keccak256(toHex("trusted-enclave-binary"));
+
+    // Create a new validation request for this test
+    const v2RequestHash = keccak256(toHex("credit-v2-valid-sgx"));
+    await s.validationRegistry.write.validationRequest([
+      s.creditValidator.address, s.agentId, "plaid:v2sgx", v2RequestHash,
+    ]);
+
+    // Compute expected reportData hash: sha256("agent:{agentId}|hash:{requestHash}|score:{score}")
+    const crypto = await import("node:crypto");
+    const preimage = `agent:${s.agentId.toString()}|hash:${v2RequestHash}|score:75`;
+    const hashBuffer = crypto.createHash("sha256").update(preimage).digest();
+    const expectedHash = ("0x" + hashBuffer.toString("hex")) as Hex;
+
+    await mockSgxVerifier.write.setMockMrEnclave([expectedMrEnclave]);
+    await mockSgxVerifier.write.setMockReportData([expectedHash]);
+    await mockSgxVerifier.write.setMockSuccess([true]);
+
+    // Configure SGX on creditValidator
+    await s.creditValidator.write.setSgxDcapVerifier([mockSgxVerifier.address]);
+    await s.creditValidator.write.setExpectedMrEnclave([expectedMrEnclave]);
+
+    // Build V2 report with sgxQuote
+    const dummyQuote = "0xdeadbeef" as Hex;
+    const report = encodeAbiParameters(
+      [{ type: "uint256" }, { type: "uint8" }, { type: "bytes32" }, { type: "bytes32" }, { type: "bytes" }],
+      [s.agentId, 75, v2RequestHash, keccak256(toHex("plaid-data")), dummyQuote]
+    );
+
+    await s.mockForwarder.write.forwardReport([s.creditValidator.address, "0x" as Hex, report]);
+
+    const score = await s.creditValidator.read.getCreditScore([s.agentId]);
+    assert.equal(score, 75, "Credit score should be 75 after V2 SGX report");
+  });
+
+  it("CreditValidator V2: tampered score + valid quote → revert", async () => {
+    // Mock still has hash for agentId|hash:v2RequestHash|score:75 from previous test
+    // Submit with tampered score (90 instead of 75)
+    const v2TamperedHash = keccak256(toHex("credit-v2-tampered"));
+    await s.validationRegistry.write.validationRequest([
+      s.creditValidator.address, s.agentId, "plaid:v2tampered", v2TamperedHash,
+    ]);
+
+    const dummyQuote = "0xdeadbeef" as Hex;
+    const report = encodeAbiParameters(
+      [{ type: "uint256" }, { type: "uint8" }, { type: "bytes32" }, { type: "bytes32" }, { type: "bytes" }],
+      [s.agentId, 90, v2TamperedHash, keccak256(toHex("d")), dummyQuote]
+    );
+
+    await assert.rejects(
+      s.mockForwarder.write.forwardReport([s.creditValidator.address, "0x" as Hex, report]),
+      /Data manipulated in transit/,
+    );
+  });
+
+  it("CreditValidator V2: wrong MRENCLAVE + valid quote → revert", async () => {
+    // Set a different MRENCLAVE on the mock than what the validator expects
+    const mockSgxVerifier = await viem.deployContract("MockSgxDcapVerifier");
+    const wrongMrEnclave = keccak256(toHex("malicious-enclave"));
+
+    const v2WrongMrHash = keccak256(toHex("credit-v2-wrong-mr"));
+    await s.validationRegistry.write.validationRequest([
+      s.creditValidator.address, s.agentId, "plaid:v2wrongmr", v2WrongMrHash,
+    ]);
+
+    const crypto = await import("node:crypto");
+    const preimage = `agent:${s.agentId.toString()}|hash:${v2WrongMrHash}|score:80`;
+    const hashBuffer = crypto.createHash("sha256").update(preimage).digest();
+    const expectedHash = ("0x" + hashBuffer.toString("hex")) as Hex;
+
+    await mockSgxVerifier.write.setMockMrEnclave([wrongMrEnclave]);
+    await mockSgxVerifier.write.setMockReportData([expectedHash]);
+    await mockSgxVerifier.write.setMockSuccess([true]);
+
+    // Point validator to this new mock with wrong MRENCLAVE
+    await s.creditValidator.write.setSgxDcapVerifier([mockSgxVerifier.address]);
+    // expectedMrEnclave on the validator is still the "trusted-enclave-binary" hash from previous test
+
+    const dummyQuote = "0xdeadbeef" as Hex;
+    const report = encodeAbiParameters(
+      [{ type: "uint256" }, { type: "uint8" }, { type: "bytes32" }, { type: "bytes32" }, { type: "bytes" }],
+      [s.agentId, 80, v2WrongMrHash, keccak256(toHex("d")), dummyQuote]
+    );
+
+    await assert.rejects(
+      s.mockForwarder.write.forwardReport([s.creditValidator.address, "0x" as Hex, report]),
+      /Untrusted TEE Code \(MRENCLAVE mismatch\)/,
+    );
+  });
+
+  it("CreditValidator V2: no SGX quote (empty bytes) → still works (backwards compat)", async () => {
+    // Reset SGX verifier (keep it set — but send empty quote)
+    const v2EmptyQuoteHash = keccak256(toHex("credit-v2-empty-quote"));
+    await s.validationRegistry.write.validationRequest([
+      s.creditValidator.address, s.agentId, "plaid:v2empty", v2EmptyQuoteHash,
+    ]);
+
+    // V2 format but with empty sgxQuote — should skip SGX check
+    const report = encodeAbiParameters(
+      [{ type: "uint256" }, { type: "uint8" }, { type: "bytes32" }, { type: "bytes32" }, { type: "bytes" }],
+      [s.agentId, 60, v2EmptyQuoteHash, keccak256(toHex("d")), "0x" as Hex]
+    );
+
+    await s.mockForwarder.write.forwardReport([s.creditValidator.address, "0x" as Hex, report]);
+
+    const score = await s.creditValidator.read.getCreditScore([s.agentId]);
+    assert.equal(score, 60, "Credit score should be 60 with empty SGX quote");
+  });
+
+  it("CreditValidator V2: sgxDcapVerifier unset → works without SGX check", async () => {
+    // Deploy a fresh credit validator without SGX configured
+    const freshCreditInitData = encodeFunctionData({
+      abi: [{
+        name: "initialize", type: "function",
+        inputs: [
+          { name: "forwarder_", type: "address" },
+          { name: "identityRegistry_", type: "address" },
+          { name: "validationRegistry_", type: "address" },
+        ],
+        outputs: [], stateMutability: "nonpayable",
+      }],
+      functionName: "initialize",
+      args: [s.mockForwarder.address, s.identityRegistry.address, s.validationRegistry.address],
+    });
+    const freshCredit = await deployProxy("PlaidCreditValidator", freshCreditInitData);
+
+    // Create validation request for the fresh validator
+    const noSgxHash = keccak256(toHex("credit-no-sgx"));
+    await s.validationRegistry.write.validationRequest([
+      freshCredit.address, s.agentId, "plaid:nosgx", noSgxHash,
+    ]);
+
+    // V2 format with a quote, but sgxDcapVerifier is address(0) — should skip SGX
+    const report = encodeAbiParameters(
+      [{ type: "uint256" }, { type: "uint8" }, { type: "bytes32" }, { type: "bytes32" }, { type: "bytes" }],
+      [s.agentId, 55, noSgxHash, keccak256(toHex("d")), "0xdeadbeef" as Hex]
+    );
+
+    await s.mockForwarder.write.forwardReport([freshCredit.address, "0x" as Hex, report]);
+
+    const score = await freshCredit.read.getCreditScore([s.agentId]);
+    assert.equal(score, 55, "Credit score should be 55 without SGX verifier");
   });
 
   it("CreditPolicy: view helpers return correct values", async () => {

@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/banner.svg" alt="Whitewall OS" width="100%" />
+<img src="assets/banner.png" alt="Whitewall OS" width="100%" />
 
 # Whitewall OS
 

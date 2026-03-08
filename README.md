@@ -292,11 +292,11 @@ All three use Chainlink's Confidential HTTP — API keys live in TEE enclaves, n
 
 | Product | Where | What it does |
 |:--------|:------|:-------------|
-| **CRE (Chainlink Runtime Environment)** | [whitewall-cre](https://github.com/hihi-yessir/whitewall-cre) | Event-driven workflow engine — runs access, KYC, and credit verification workflows in the DON |
-| **Confidential HTTP** | KYC + Credit workflows | Fetches Stripe Identity and Plaid Balance APIs from inside TEE enclaves — API keys never leave the enclave |
-| **ACE (Access Control Engine)** | [whitewall-os](https://github.com/hihi-yessir/whitewall-os) contracts | PolicyEngine + TieredPolicy + WhitewallExtractor — evaluates 5-8 on-chain checks before granting access |
-| **DON (Decentralized Oracle Network)** | CRE workflow execution | Signs and delivers reports to on-chain consumer contracts via KeystoneForwarder |
-| **DON Vault (Secrets)** | CRE secrets management | Stores Stripe API keys, Plaid credentials, and JWT signing keys — accessible only inside TEE enclaves |
+| **CRE** | [`workflows/access-workflow/main.ts`](workflows/access-workflow/main.ts), [`kyc-workflow`](workflows/kyc-workflow/main.ts), [`credit-workflow`](workflows/credit-workflow/main.ts) | Event-driven workflow runtime — all 3 workflows use `cre.handler()`, `Runner`, and EVM triggers to run verification logic in the DON |
+| **Confidential HTTP** | [`kyc-workflow/main.ts#L107`](workflows/kyc-workflow/main.ts) — Stripe API, [`credit-workflow/main.ts#L140`](workflows/credit-workflow/main.ts) — Plaid API | `ConfidentialHTTPClient.sendRequest()` fetches external APIs from inside TEE enclaves — API keys injected via DON vault templates, never exposed to nodes |
+| **ACE** | [`contracts/ace/`](contracts/ace/) — [PolicyEngine](contracts/ace/vendor/core/PolicyEngine.sol), [TieredPolicy](contracts/ace/TieredPolicy.sol), [WhitewallExtractor](contracts/ace/WhitewallExtractor.sol) | `runPolicy` modifier on [`WhitewallConsumer.onReport()`](contracts/ace/WhitewallConsumer.sol) triggers PolicyEngine → Extractor → TieredPolicy (5-8 on-chain checks per tier) |
+| **DON + writeReport** | All 3 workflows call `runtime.report()` + `evmClient.writeReport()` → [`WhitewallConsumer`](contracts/ace/WhitewallConsumer.sol), [`StripeKYCValidator`](contracts/StripeKYCValidator.sol), [`PlaidCreditValidator`](contracts/PlaidCreditValidator.sol) | DON nodes reach consensus, sign the report, and deliver it on-chain via KeystoneForwarder to each contract's `onReport()` |
+| **DON Vault** | [`kyc-workflow`](workflows/kyc-workflow/main.ts) — `STRIPE_SECRET_KEY_B64`, [`credit-workflow`](workflows/credit-workflow/main.ts) — `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ACCESS_TOKEN` | Secrets stored in DON vault (TEE enclave), injected into Confidential HTTP requests via `{{.KEY_NAME}}` template syntax |
 
 ---
 

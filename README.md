@@ -59,7 +59,7 @@ graph TB
         CW[Credit Workflow]
     end
 
-    subgraph Contracts["Verified-Agent-Hub (this repo)"]
+    subgraph Contracts["whitewall-os (this repo)"]
         subgraph ACE["Access Control Engine"]
             PE[PolicyEngine]
             TP[TieredPolicy]
@@ -109,7 +109,7 @@ graph TB
 
 | Repository | What it does | Language |
 |:-----------|:-------------|:---------|
-| [**Verified-Agent-Hub**](https://github.com/hihi-yessir/Verified-Agent-Hub) | Smart contracts, ACE policies, validators, SGX TEE, TypeScript + Go SDK | Solidity, TypeScript, Go |
+| [**whitewall-os**](https://github.com/hihi-yessir/whitewall-os) | Smart contracts, ACE policies, validators, SGX TEE, TypeScript + Go SDK | Solidity, TypeScript, Go |
 | [**whitewall-cre**](https://github.com/hihi-yessir/whitewall-cre) | Chainlink CRE workflows — access, KYC, credit verification | Go |
 | [**whitewall**](https://github.com/hihi-yessir/whitewall) | Demo frontend — bonding, KYC, credit, tier-gated access | TypeScript |
 | [**x402-auth-gateway**](https://github.com/hihi-yessir/x402-auth-gateway) | x402 payment-gated proxy — 402 challenge, payment hold, CRE trigger, settle/refund | Go |
@@ -266,7 +266,7 @@ const status = await wos.getFullStatus(agentId);
 ### Go
 
 ```go
-import wos "github.com/hihi-yessir/Verified-Agent-Hub/sdk-go"
+import wos "github.com/hihi-yessir/whitewall-os/sdk-go"
 
 addrs := wos.ChainAddresses[wos.BaseSepolia]
 // addrs.PolicyEngine, addrs.TieredPolicy, etc.
@@ -294,7 +294,7 @@ All three use Chainlink's Confidential HTTP — API keys live in TEE enclaves, n
 |:--------|:------|:-------------|
 | **CRE (Chainlink Runtime Environment)** | [whitewall-cre](https://github.com/hihi-yessir/whitewall-cre) | Event-driven workflow engine — runs access, KYC, and credit verification workflows in the DON |
 | **Confidential HTTP** | KYC + Credit workflows | Fetches Stripe Identity and Plaid Balance APIs from inside TEE enclaves — API keys never leave the enclave |
-| **ACE (Access Control Engine)** | [Verified-Agent-Hub](https://github.com/hihi-yessir/Verified-Agent-Hub) contracts | PolicyEngine + TieredPolicy + WhitewallExtractor — evaluates 5-8 on-chain checks before granting access |
+| **ACE (Access Control Engine)** | [whitewall-os](https://github.com/hihi-yessir/whitewall-os) contracts | PolicyEngine + TieredPolicy + WhitewallExtractor — evaluates 5-8 on-chain checks before granting access |
 | **DON (Decentralized Oracle Network)** | CRE workflow execution | Signs and delivers reports to on-chain consumer contracts via KeystoneForwarder |
 | **DON Vault (Secrets)** | CRE secrets management | Stores Stripe API keys, Plaid credentials, and JWT signing keys — accessible only inside TEE enclaves |
 
@@ -323,8 +323,8 @@ All three use Chainlink's Confidential HTTP — API keys live in TEE enclaves, n
 
 ```bash
 # Clone
-git clone https://github.com/hihi-yessir/Verified-Agent-Hub.git
-cd Verified-Agent-Hub
+git clone https://github.com/hihi-yessir/whitewall-os.git
+cd whitewall-os
 
 # Install
 npm install

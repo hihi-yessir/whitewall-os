@@ -33,6 +33,7 @@ It layers identity verification (World ID), KYC (Stripe), and credit scoring (Pl
 - [SDK](#sdk)
 - [CRE Workflows](#cre-workflows)
 - [Chainlink Products Used](#chainlink-products-used)
+- [World ID Integration](#world-id-integration)
 - [Tech Stack](#tech-stack)
 - [Getting Started](#getting-started)
 - [ERC-8004 Protocol](#erc-8004-protocol)
@@ -297,6 +298,18 @@ All three use Chainlink's Confidential HTTP — API keys live in TEE enclaves, n
 | **ACE** | [`contracts/ace/`](contracts/ace/) — [PolicyEngine](contracts/ace/vendor/core/PolicyEngine.sol), [TieredPolicy](contracts/ace/TieredPolicy.sol), [WhitewallExtractor](contracts/ace/WhitewallExtractor.sol) | `runPolicy` modifier on [`WhitewallConsumer.onReport()`](contracts/ace/WhitewallConsumer.sol) triggers PolicyEngine → Extractor → TieredPolicy (5-8 on-chain checks per tier) |
 | **DON + writeReport** | All 3 workflows call `runtime.report()` + `evmClient.writeReport()` → [`WhitewallConsumer`](contracts/ace/WhitewallConsumer.sol), [`StripeKYCValidator`](contracts/StripeKYCValidator.sol), [`PlaidCreditValidator`](contracts/PlaidCreditValidator.sol) | DON nodes reach consensus, sign the report, and deliver it on-chain via KeystoneForwarder to each contract's `onReport()` |
 | **DON Vault** | [`kyc-workflow/main.ts#L110`](workflows/kyc-workflow/main.ts) — `STRIPE_SECRET_KEY_B64`, [`credit-workflow/main.ts#L143`](workflows/credit-workflow/main.ts) — `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ACCESS_TOKEN` | `vaultDonSecrets` stores API credentials in the DON's encrypted secret store, injected into Confidential HTTP requests at runtime via `{{.KEY_NAME}}` templates |
+
+---
+
+## World ID Integration
+
+| Component | Where | What it does |
+|:----------|:------|:-------------|
+| **On-chain ZK verification** | [`WorldIDValidator.sol`](contracts/WorldIDValidator.sol) | `verifyAndSetHumanTag()` calls Worldcoin's `IWorldID.verifyProof()` on-chain — verifies the ZK proof, stores the nullifier hash for sybil protection, writes `humanVerified` metadata to IdentityRegistry |
+| **Per-agent nullifier** | [`WorldIDValidator.sol`](contracts/WorldIDValidator.sol) | External nullifier is derived per agentId (`abi.encodePacked("whitewall-human-", agentId)`) — one proof per agent, prevents reuse across agents |
+| **ACE policy check** | [`TieredPolicy.sol#L136`](contracts/ace/TieredPolicy.sol) | Tier 2+ access requires `WorldIDValidator.isHumanVerified(agentId)` — called on every access request as part of the 5-8 check pipeline |
+| **Frontend proof generation** | [`worldid-proof/`](worldid-proof/src/app/page.tsx) | IDKit widget generates the ZK proof client-side, submitted to `WorldIDValidator` in a single tx |
+| **SDK read** | [`sdk/src/client.ts`](sdk/src/client.ts) | `wos.isHumanVerified(agentId)` reads verification status from the validator contract |
 
 ---
 
